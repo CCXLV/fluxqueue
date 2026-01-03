@@ -15,7 +15,7 @@ pub async fn run_worker(mut rx: tokio::sync::mpsc::Receiver<WorkerMessage>, max_
                 let handle = tokio::spawn(async move {
                     let _permit = sem.acquire().await.unwrap();
 
-                    tokio::task::spawn(async move {
+                    tokio::task::spawn_blocking(move || {
                         call_python(task.func);
                     })
                     .await
@@ -33,7 +33,7 @@ pub async fn run_worker(mut rx: tokio::sync::mpsc::Receiver<WorkerMessage>, max_
                         let handle = tokio::spawn(async move {
                             let _permit = sem.acquire().await.unwrap();
 
-                            tokio::task::spawn(async move {
+                            tokio::task::spawn_blocking(move || {
                                 call_python(task.func);
                             })
                             .await
