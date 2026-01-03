@@ -23,15 +23,4 @@ class FastQueueCore:
         """
         ...
 
-    def shutdown(self) -> None:
-        """
-        Wait for all queued tasks to complete and shut down the worker.
-
-        This method blocks until all tasks have finished executing, then
-        permanently shuts down the worker. The queue cannot be used after
-        calling this method.
-
-        Note: This is primarily useful for testing purposes. In production,
-        the queue should remain active to handle tasks asynchronously.
-        """
-        ...
+    async def _shutdown(self) -> None: ...
