@@ -6,33 +6,33 @@ mod runtime;
 
 use queue::QueueHandle;
 
-#[pyclass]
-pub struct TaskQueue {
+#[pyclass(subclass)]
+pub struct FastQueueCore {
     inner: QueueHandle,
 }
 
 #[pymethods]
-impl TaskQueue {
+impl FastQueueCore {
     #[new]
     #[pyo3(signature = (max_workers=10))]
     fn new(py: Python<'_>, max_workers: usize) -> Self {
         let inner = runtime::start_runtime(py, max_workers);
-        TaskQueue { inner }
+        FastQueueCore { inner }
     }
-    
+
     fn enqueue(&self, func: Py<PyAny>) {
         self.inner.enqueue(func);
     }
-    
-    fn wait(&self, py: Python<'_>) {
+
+    fn shutdown(&self, py: Python<'_>) {
         py.detach(|| {
-            self.inner.shutdown_and_wait();
+            self.inner.shutdown();
         });
     }
 }
 
 #[pymodule]
 fn fastqueue_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<TaskQueue>()?;
+    m.add_class::<FastQueueCore>()?;
     Ok(())
 }

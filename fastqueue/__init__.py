@@ -1,3 +1,3 @@
-from .fastqueue_core import TaskQueue
+from .core import FastQueue
 
-__all__ = ["TaskQueue"]
+__all__ = ["FastQueue"]

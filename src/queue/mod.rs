@@ -25,7 +25,7 @@ impl QueueHandle {
         }
     }
 
-    pub fn shutdown_and_wait(&self) {
+    pub fn shutdown(&self) {
         let (tx, rx) = oneshot::channel();
 
         // Send shutdown signal
