@@ -1,6 +1,5 @@
 use pyo3::prelude::*;
 
-mod python;
 mod queue;
 mod runtime;
 
@@ -15,8 +14,8 @@ pub struct FastQueueCore {
 impl FastQueueCore {
     #[new]
     #[pyo3(signature = (max_workers=10))]
-    fn new(py: Python<'_>, max_workers: usize) -> Self {
-        let inner = runtime::start_runtime(py, max_workers);
+    fn new(max_workers: usize) -> Self {
+        let inner = runtime::start_runtime(max_workers);
         FastQueueCore { inner }
     }
 

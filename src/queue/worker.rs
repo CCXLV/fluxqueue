@@ -1,24 +1,21 @@
-use crate::python::call::call_python;
 use crate::queue::WorkerMessage;
+use pyo3::prelude::*;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-pub async fn run_worker(
-    mut __rx__: tokio::sync::mpsc::Receiver<WorkerMessage>,
-    max_workers: usize,
-) {
+pub async fn run_worker(mut rx: tokio::sync::mpsc::Receiver<WorkerMessage>, max_workers: usize) {
     let semaphore = Arc::new(Semaphore::new(max_workers));
     let mut task_handles = Vec::new();
 
     loop {
-        match __rx__.recv().await {
+        match rx.recv().await {
             Some(WorkerMessage::Task(task)) => {
                 let sem = semaphore.clone();
 
                 let handle = tokio::spawn(async move {
                     let _permit = sem.acquire().await.unwrap();
 
-                    tokio::task::spawn_blocking(move || {
+                    tokio::task::spawn(async move {
                         call_python(task.func);
                     })
                     .await
@@ -29,14 +26,14 @@ pub async fn run_worker(
             }
             Some(WorkerMessage::Shutdown(done_tx)) => {
                 // CRITICAL: Process any remaining tasks in the channel
-                while let Ok(msg) = __rx__.try_recv() {
+                while let Ok(msg) = rx.try_recv() {
                     if let WorkerMessage::Task(task) = msg {
                         let sem = semaphore.clone();
 
                         let handle = tokio::spawn(async move {
                             let _permit = sem.acquire().await.unwrap();
 
-                            tokio::task::spawn_blocking(move || {
+                            tokio::task::spawn(async move {
                                 call_python(task.func);
                             })
                             .await
@@ -66,3 +63,23 @@ pub async fn run_worker(
         }
     }
 }
+
+fn call_python(func: Py<PyAny>) {
+    Python::attach(|py| {
+        if let Err(e) = func.call0(py) {
+            e.print(py);
+        }
+    });
+}
+
+// fn is_coroutine(py: Python<'_>, func: &Bound<PyAny>) -> bool {
+//     let inspect = py.import("inspect").ok();
+//     if let Some(inspect_mod) = inspect {
+//         inspect_mod
+//             .call_method1("iscoroutine", (func,))
+//             .and_then(|res| res.extract::<bool>())
+//             .unwrap_or(false)
+//     } else {
+//         false
+//     }
+// }
