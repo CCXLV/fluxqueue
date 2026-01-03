@@ -3,8 +3,8 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-pub async fn run_worker(mut rx: tokio::sync::mpsc::Receiver<WorkerMessage>, max_workers: usize) {
-    let semaphore = Arc::new(Semaphore::new(max_workers));
+pub async fn run_worker(mut rx: tokio::sync::mpsc::Receiver<WorkerMessage>, workers: usize) {
+    let semaphore = Arc::new(Semaphore::new(workers));
     let mut task_handles = Vec::new();
 
     loop {

@@ -8,7 +8,7 @@ class FastQueueCore:
     High-performance task queue backed by Rust.
     """
 
-    def __init__(self, max_workers: int = 10) -> None:
+    def __init__(self, workers: int = 10) -> None:
         """
         Initialize a new task queue.
         """

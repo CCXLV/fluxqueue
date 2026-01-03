@@ -6,8 +6,8 @@ from .fastqueue_core import FastQueueCore
 
 
 class FastQueue(FastQueueCore):
-    def __new__(cls, max_workers: int = 10):
-        return super().__new__(cls, max_workers)
+    def __new__(cls, workers: int = 10):
+        return super().__new__(cls, workers)
 
     def task(self, func: Callable) -> Callable:
         """

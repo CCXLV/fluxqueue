@@ -13,9 +13,9 @@ pub struct FastQueueCore {
 #[pymethods]
 impl FastQueueCore {
     #[new]
-    #[pyo3(signature = (max_workers=10))]
-    fn new(max_workers: usize) -> Self {
-        let inner = runtime::start_runtime(max_workers);
+    #[pyo3(signature = (workers=10))]
+    fn new(workers: usize) -> Self {
+        let inner = runtime::start_runtime(workers);
         FastQueueCore { inner }
     }
 
