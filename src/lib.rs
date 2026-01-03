@@ -23,10 +23,16 @@ impl FastQueueCore {
         self.inner.enqueue(func);
     }
 
-    fn _shutdown<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    fn _shutdown(&self, py: Python<'_>) {
+        py.detach(|| {
+            self.inner.shutdown();
+        });
+    }
+
+    fn _async_shutdown<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            inner.shutdown().await;
+            inner.async_shutdown().await;
             Ok(())
         })
     }

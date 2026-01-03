@@ -21,7 +21,7 @@ class FastQueue(FastQueueCore):
 
         return wrapper
 
-    async def close(self) -> None:
+    def close(self) -> None:
         """
         Gracefully finish all pending tasks and shut down the queue.
 
@@ -32,4 +32,17 @@ class FastQueue(FastQueueCore):
         Best used in application shutdown hooks (e.g., FastAPI lifespan)
         to ensure no background tasks are lost during deployment.
         """
-        await self._shutdown()
+        self._shutdown()
+
+    async def aclose(self) -> None:
+        """
+        Gracefully finish all pending tasks and shut down the queue.
+
+        This method is asynchronous and non-blocking. It stops the queue
+        from accepting new work and waits for current tasks in the
+        buffer to complete before exiting.
+
+        Best used in application shutdown hooks (e.g., FastAPI lifespan)
+        to ensure no background tasks are lost during deployment.
+        """
+        await self._async_shutdown()

@@ -1,9 +1,10 @@
 use crate::queue::WorkerMessage;
 use pyo3::prelude::*;
 use std::sync::Arc;
-use tokio::sync::Semaphore;
+use tokio::sync::{Semaphore, mpsc, oneshot};
+use tokio::task::JoinHandle;
 
-pub async fn run_worker(mut rx: tokio::sync::mpsc::Receiver<WorkerMessage>, workers: usize) {
+pub async fn run_worker(mut rx: mpsc::Receiver<WorkerMessage>, workers: usize) {
     let semaphore = Arc::new(Semaphore::new(workers));
     let mut task_handles = Vec::new();
 
@@ -24,33 +25,9 @@ pub async fn run_worker(mut rx: tokio::sync::mpsc::Receiver<WorkerMessage>, work
 
                 task_handles.push(handle);
             }
-            Some(WorkerMessage::Shutdown(done_tx)) => {
-                // CRITICAL: Process any remaining tasks in the channel
-                while let Ok(msg) = rx.try_recv() {
-                    if let WorkerMessage::Task(task) = msg {
-                        let sem = semaphore.clone();
-
-                        let handle = tokio::spawn(async move {
-                            let _permit = sem.acquire().await.unwrap();
-
-                            tokio::task::spawn_blocking(move || {
-                                call_python(task.func);
-                            })
-                            .await
-                            .ok();
-                        });
-
-                        task_handles.push(handle);
-                    }
-                }
-
-                // Wait for ALL tasks to complete
-                for handle in task_handles {
-                    let _ = handle.await;
-                }
-
-                // Signal that we're done
-                let _ = done_tx.send(());
+            Some(WorkerMessage::Shutdown(done_tx))
+            | Some(WorkerMessage::AsyncShutdown(done_tx)) => {
+                handle_shutdown(done_tx, &mut rx, &mut task_handles, &semaphore).await;
                 break;
             }
             None => {
@@ -70,6 +47,37 @@ fn call_python(func: Py<PyAny>) {
             e.print(py);
         }
     });
+}
+
+async fn handle_shutdown(
+    done_tx: oneshot::Sender<()>,
+    rx: &mut mpsc::Receiver<WorkerMessage>,
+    task_handles: &mut Vec<JoinHandle<()>>,
+    semaphore: &Arc<Semaphore>,
+) {
+    while let Ok(msg) = rx.try_recv() {
+        if let WorkerMessage::Task(task) = msg {
+            let sem = semaphore.clone();
+
+            let handle = tokio::spawn(async move {
+                let _permit = sem.acquire().await.unwrap();
+
+                tokio::task::spawn_blocking(move || {
+                    call_python(task.func);
+                })
+                .await
+                .ok();
+            });
+
+            task_handles.push(handle);
+        }
+    }
+
+    for handle in task_handles {
+        let _ = handle.await;
+    }
+
+    let _ = done_tx.send(());
 }
 
 // fn is_coroutine(py: Python<'_>, func: &Bound<PyAny>) -> bool {

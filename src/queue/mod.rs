@@ -8,6 +8,7 @@ pub mod worker;
 pub enum WorkerMessage {
     Task(Task),
     Shutdown(oneshot::Sender<()>),
+    AsyncShutdown(oneshot::Sender<()>),
 }
 
 #[derive(Clone)]
@@ -25,9 +26,26 @@ impl QueueHandle {
         }
     }
 
-    pub async fn shutdown(&self) {
+    pub fn shutdown(&self) {
         let (tx, rx) = oneshot::channel();
-        if self.sender.send(WorkerMessage::Shutdown(tx)).await.is_ok() {
+
+        if self
+            .sender
+            .blocking_send(WorkerMessage::Shutdown(tx))
+            .is_ok()
+        {
+            let _ = rx.blocking_recv();
+        }
+    }
+
+    pub async fn async_shutdown(&self) {
+        let (tx, rx) = oneshot::channel();
+        if self
+            .sender
+            .send(WorkerMessage::AsyncShutdown(tx))
+            .await
+            .is_ok()
+        {
             let _ = rx.await;
         }
     }
