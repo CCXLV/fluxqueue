@@ -25,17 +25,10 @@ impl QueueHandle {
         }
     }
 
-    pub fn shutdown(&self) {
+    pub async fn shutdown(&self) {
         let (tx, rx) = oneshot::channel();
-
-        // Send shutdown signal
-        if self
-            .sender
-            .blocking_send(WorkerMessage::Shutdown(tx))
-            .is_ok()
-        {
-            // Wait for worker to confirm shutdown
-            let _ = rx.blocking_recv();
+        if self.sender.send(WorkerMessage::Shutdown(tx)).await.is_ok() {
+            let _ = rx.await;
         }
     }
 }
