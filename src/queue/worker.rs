@@ -33,7 +33,6 @@ pub async fn run_worker(mut rx: mpsc::Receiver<WorkerMessage>, workers: usize) {
                 break;
             }
             None => {
-                // Channel closed, drain pending tasks
                 for handle in task_handles {
                     let _ = handle.await;
                 }
@@ -54,7 +53,6 @@ async fn execute_task(func: Py<PyAny>) {
                 if is_coro {
                     (true, Some(bound_result.unbind()))
                 } else {
-                    // Sync function executed inline, no further work needed
                     (false, None)
                 }
             }
