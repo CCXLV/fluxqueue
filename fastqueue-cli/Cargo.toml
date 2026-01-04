@@ -1,0 +1,16 @@
+[package]
+name = "fastqueue-cli"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "fastqueue_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fastqueue-cli"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5.54", features = ["derive"] }
+tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }

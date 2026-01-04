@@ -45,21 +45,19 @@ pub async fn run_worker(mut rx: mpsc::Receiver<WorkerMessage>, workers: usize) {
 /// Executes Python function, handling both sync and async cases
 async fn execute_task(func: Py<PyAny>) {
     // Single GIL acquisition: invoke function and check return type
-    let (is_async, maybe_coro) = Python::attach(|py| {
-        match func.call0(py) {
-            Ok(result) => {
-                let bound_result = result.into_bound(py);
-                let is_coro = is_coroutine_object_cached(py, &bound_result);
-                if is_coro {
-                    (true, Some(bound_result.unbind()))
-                } else {
-                    (false, None)
-                }
-            }
-            Err(e) => {
-                e.print(py);
+    let (is_async, maybe_coro) = Python::attach(|py| match func.call0(py) {
+        Ok(result) => {
+            let bound_result = result.into_bound(py);
+            let is_coro = is_coroutine_object_cached(py, &bound_result);
+            if is_coro {
+                (true, Some(bound_result.unbind()))
+            } else {
                 (false, None)
             }
+        }
+        Err(e) => {
+            e.print(py);
+            (false, None)
         }
     });
 
