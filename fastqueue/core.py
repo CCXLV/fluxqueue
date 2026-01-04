@@ -1,25 +1,38 @@
+import inspect
 from collections.abc import Callable
 from functools import partial, wraps
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 
 from .fastqueue_core import FastQueueCore
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 class FastQueue(FastQueueCore):
     def __new__(cls, workers: int = 10):
         return super().__new__(cls, workers)
 
-    def task(self, func: Callable) -> Callable:
+    def task(self, func: Callable[P, R]) -> Callable[P, None]:
         """
         Decorator for wrapping a function to be enqueued in the fastqueue.
         """
+        if inspect.iscoroutinefunction(func):
 
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            self.enqueue(partial[Any](func, *args, **kwargs))
-            return None  # fire-and-forget
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                self.enqueue(partial[Any](func, *args, **kwargs))
+                return None
 
-        return wrapper
+            return async_wrapper
+        else:
+
+            @wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                self.enqueue(partial[Any](func, *args, **kwargs))
+                return None  # fire-and-forget
+
+            return sync_wrapper
 
     def close(self) -> None:
         """
