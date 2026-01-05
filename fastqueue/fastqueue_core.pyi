@@ -14,6 +14,12 @@ class FastQueueCore:
         """
         ...
 
+    def register_task(self, name: str, func: Callable[..., T]) -> None:
+        """
+        Register a new task at startup
+        """
+        ...
+
     def enqueue(
         self,
         func: Callable[..., T],
@@ -23,5 +29,14 @@ class FastQueueCore:
         """
         ...
 
-    def _shutdown(self) -> None: ...
-    async def _async_shutdown(self) -> None: ...
+    def shutdown(self) -> None:
+        """
+        Sync shutdown
+        """
+        ...
+
+    async def async_shutdown(self) -> None:
+        """
+        Async shutdown
+        """
+        ...
