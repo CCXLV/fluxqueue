@@ -1,6 +1,6 @@
 import inspect
 from collections.abc import Callable
-from functools import partial, wraps
+from functools import wraps
 from typing import ParamSpec, TypeVar
 
 from .fastqueue_core import FastQueueCore
@@ -10,8 +10,8 @@ R = TypeVar("R")
 
 
 class FastQueue:
-    def __init__(self):
-        self._core = FastQueueCore()
+    def __init__(self, redis_url: str | None = "redis://127.0.0.1:6379"):
+        self._core = FastQueueCore(redis_url=redis_url)
 
     def task(
         self, *, name: str | None = None
@@ -20,15 +20,7 @@ class FastQueue:
         Decorator for wrapping a function to be enqueued in the fastqueue.
         """
 
-        if name is not None and not isinstance(name, str):
-            raise TypeError("@task: name must be a string or None")
-
         def decorator(func: Callable[P, R]) -> Callable[P, None]:
-            if not callable(func):
-                raise TypeError(
-                    f"@task can only wrap callable objects, got {type(func)}"
-                )
-
             task_name = name if name else func.__name__
             self._core.register_task(task_name, func)
 
