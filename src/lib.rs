@@ -1,3 +1,4 @@
+use log::info;
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use std::{
@@ -9,12 +10,13 @@ mod queue;
 mod runtime;
 
 use fastqueue_worker;
+use fastqueue_common;
 use queue::QueueHandle;
 
 #[pyclass(subclass)]
 pub struct FastQueueCore {
     pub(crate) inner: QueueHandle,
-    pub(crate) registry: fastqueue_worker::TaskRegistry,
+    pub(crate) registry: fastqueue_common::TaskRegistry,
 }
 
 #[pymethods]
@@ -25,19 +27,31 @@ impl FastQueueCore {
         let inner = runtime::start_runtime(workers);
         FastQueueCore {
             inner,
-            registry: fastqueue_worker::TaskRegistry {
+            registry: fastqueue_common::TaskRegistry {
                 tasks: Arc::new(RwLock::new(HashMap::new())),
             },
         }
     }
 
     fn register_task(&self, name: String, func: Py<PyAny>) -> PyResult<()> {
-        fastqueue_worker::register_task(name, func, &self.registry)
+        fastqueue_common::register_task(name, func, &self.registry)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         Ok(())
     }
 
-    fn enqueue(&self, py: Python<'_>, name: String, args: Py<PyTuple>, kwargs: Option<Py<PyDict>>) {
+    fn enqueue(
+        &self,
+        py: Python<'_>,
+        name: String,
+        args: Py<PyTuple>,
+        kwargs: Option<Py<PyDict>>,
+    ) -> PyResult<()> {
+        let bound_args = args.into_bound(py).into_any();
+        let arg_bytes = fastqueue_common::deserialize_python_to_msgpack(bound_args)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        info!("{:?}", arg_bytes);
+
+        Ok(())
     }
 
     fn shutdown(&self, py: Python<'_>) {
@@ -57,6 +71,7 @@ impl FastQueueCore {
 
 #[pymodule]
 fn fastqueue_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    pyo3_log::init();
     m.add_class::<FastQueueCore>()?;
     Ok(())
 }

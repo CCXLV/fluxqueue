@@ -1,14 +1,17 @@
+import logging
+
 from fastqueue import FastQueue
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 fastqueue = FastQueue()
 
 
 @fastqueue.task()
-def test_name(name: str):
-    print(f"Name: {name}")
+def test_name():
+    print(f"Name: Giorgi")
 
 
-test_name("George")
-test_name("John Doe")
+test_name()
 
 fastqueue.close()
