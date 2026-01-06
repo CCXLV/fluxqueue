@@ -1,11 +1,6 @@
 use fastqueue_common::{Task, serialize_task_data};
 use std::io::{Error, ErrorKind};
 
-pub fn get_redis_client(url: &str) -> Result<redis::Client, redis::RedisError> {
-    let client = redis::Client::open(url)?;
-    Ok(client)
-}
-
 pub fn push_task(redis_client: &redis::Client, task: Task) -> Result<(), Error> {
     let mut conn = redis_client.get_connection().map_err(|e| {
         Error::new(

@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "crates/fastqueue-common", 
-    "crates/fastqueue-worker"
+    "crates/fastqueue-worker",
+    "crates/fastqueue-cli"
 ]
 
 [package]

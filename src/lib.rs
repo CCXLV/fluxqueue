@@ -26,7 +26,7 @@ impl FastQueueCore {
     #[pyo3(signature = (redis_url="redis://127.0.0.1:6379".to_string()))]
     fn new(redis_url: String) -> PyResult<Self> {
         let inner = runtime::start_runtime(4);
-        let redis_client = redis_client::get_redis_client(&redis_url)
+        let redis_client = fastqueue_common::get_redis_client(&redis_url)
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e)))?;
 
         Ok(FastQueueCore {
@@ -52,12 +52,12 @@ impl FastQueueCore {
         kwargs: Option<Py<PyDict>>,
     ) -> PyResult<()> {
         let bound_args = args.into_bound(py).into_any();
-        let arg_bytes = fastqueue_common::deserialize_python_to_msgpack(bound_args)
+        let arg_bytes = fastqueue_common::serialize_python_to_msgpack(bound_args)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
         let kwarg_bytes = if let Some(kwargs) = kwargs {
             let bound_kwargs = kwargs.into_bound(py).into_any();
-            fastqueue_common::deserialize_python_to_msgpack(bound_kwargs)
+            fastqueue_common::serialize_python_to_msgpack(bound_kwargs)
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
         } else {
             vec![128] // 128: Msgpack Decimal for empty dictionary

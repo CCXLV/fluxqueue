@@ -6,7 +6,7 @@ use std::io::{Error, ErrorKind};
 
 use crate::task::Task;
 
-pub fn deserialize_python_to_msgpack(object: Bound<'_, PyAny>) -> Result<Vec<u8>, Error> {
+pub fn serialize_python_to_msgpack(object: Bound<'_, PyAny>) -> Result<Vec<u8>, Error> {
     let serialized_obj: Value =
         from_pyobject(object).map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
@@ -28,4 +28,14 @@ pub fn serialize_task_data(task: &Task) -> Result<Vec<u8>, Error> {
         )
     })?;
     Ok(blob)
+}
+
+pub fn deserialize_raw_task_data(raw_data: Vec<u8>) -> Result<Task, Error> {
+    let task: Task = rmp_serde::from_slice(&raw_data).map_err(|e| {
+        Error::new(
+            ErrorKind::Other,
+            format!("Failed to deserialize task data: {}", e),
+        )
+    })?;
+    Ok(task)
 }
