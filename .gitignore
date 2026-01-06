@@ -4,3 +4,5 @@ target/
 
 fastqueue_core.cpython**
 __pycache__/
+
+.vscode/
