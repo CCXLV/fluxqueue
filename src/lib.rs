@@ -10,13 +10,13 @@ mod queue;
 mod redis_client;
 mod runtime;
 
-use fastqueue_common;
+use fastqueue_worker;
 use queue::QueueHandle;
 
 #[pyclass(subclass)]
 pub struct FastQueueCore {
     pub(crate) inner: QueueHandle,
-    pub(crate) registry: fastqueue_common::TaskRegistry,
+    pub(crate) registry: fastqueue_worker::TaskRegistry,
     pub(crate) redis_client: redis::Client,
 }
 
@@ -26,12 +26,12 @@ impl FastQueueCore {
     #[pyo3(signature = (redis_url="redis://127.0.0.1:6379".to_string()))]
     fn new(redis_url: String) -> PyResult<Self> {
         let inner = runtime::start_runtime(4);
-        let redis_client = fastqueue_common::get_redis_client(&redis_url)
+        let redis_client = fastqueue_worker::get_redis_client(&redis_url)
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e)))?;
 
         Ok(FastQueueCore {
             inner,
-            registry: fastqueue_common::TaskRegistry {
+            registry: fastqueue_worker::TaskRegistry {
                 tasks: Arc::new(RwLock::new(HashMap::new())),
             },
             redis_client,
@@ -39,7 +39,7 @@ impl FastQueueCore {
     }
 
     fn register_task(&self, name: String, func: Py<PyAny>) -> PyResult<()> {
-        fastqueue_common::register_task(name, func, &self.registry)
+        fastqueue_worker::register_task(name, func, &self.registry)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         Ok(())
     }
@@ -52,18 +52,18 @@ impl FastQueueCore {
         kwargs: Option<Py<PyDict>>,
     ) -> PyResult<()> {
         let bound_args = args.into_bound(py).into_any();
-        let arg_bytes = fastqueue_common::serialize_python_to_msgpack(bound_args)
+        let arg_bytes = fastqueue_worker::serialize_python_to_msgpack(bound_args)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
         let kwarg_bytes = if let Some(kwargs) = kwargs {
             let bound_kwargs = kwargs.into_bound(py).into_any();
-            fastqueue_common::serialize_python_to_msgpack(bound_kwargs)
+            fastqueue_worker::serialize_python_to_msgpack(bound_kwargs)
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
         } else {
             vec![128] // 128: Msgpack Decimal for empty dictionary
         };
 
-        let task = fastqueue_common::Task {
+        let task = fastqueue_worker::Task {
             id: uuid::Uuid::new_v4().to_string(),
             name,
             args: arg_bytes,

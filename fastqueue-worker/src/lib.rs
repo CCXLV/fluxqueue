@@ -1,9 +1,15 @@
-use fastqueue_common::{async_redis, get_redis_client};
 use redis::aio::ConnectionManagerConfig;
 use std::{io::Error, time::Duration};
 use tokio::task::JoinSet;
 
+mod redis_client;
+mod serialize;
+mod task;
 mod worker;
+
+pub use redis_client::*;
+pub use serialize::*;
+pub use task::*;
 
 pub async fn start_worker(redis_url: String, num_workers: u32) -> Result<(), Error> {
     let redis_client = get_redis_client(&redis_url)?;
@@ -25,7 +31,7 @@ pub async fn start_worker(redis_url: String, num_workers: u32) -> Result<(), Err
 
         workers.spawn(async move {
             loop {
-                match async_redis::mark_task_as_processing(&mut manager).await {
+                match mark_task_as_processing(&mut manager).await {
                     Ok(Some(raw_data)) => {
                         println!("Worker {} got task ({} bytes)", id, raw_data.len());
                     }

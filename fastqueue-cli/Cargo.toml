@@ -1,3 +1,5 @@
+[workspace]
+
 [package]
 name = "fastqueue-cli"
 version = "0.1.0"

@@ -1,4 +1,4 @@
-use fastqueue_common::{Task, serialize_task_data};
+use fastqueue_worker::{Task, serialize_task_data};
 use std::io::{Error, ErrorKind};
 
 pub fn push_task(redis_client: &redis::Client, task: Task) -> Result<(), Error> {
