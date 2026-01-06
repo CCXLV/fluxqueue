@@ -1,10 +1,5 @@
 [workspace]
-members = [
-    "fastqueue-worker"
-]
-exclude = [
-    "fastqueue-cli"
-]
+members = ["fastqueue-worker"]
 
 [package]
 name = "fastqueue_core"
