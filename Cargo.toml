@@ -1,5 +1,9 @@
 [workspace]
-members = ["fastqueue-common", "fastqueue-worker"]
+members = [
+    "crates/fastqueue-common", 
+    "crates/fastqueue-worker",
+    "crates/fastqueue-cli"
+]
 
 [package]
 name = "fastqueue_core"
@@ -14,7 +18,7 @@ crate-type = ["cdylib"]
 pyo3 = "0.27.2"
 pyo3-async-runtimes = { version = "0.27.0", features = ["tokio-runtime"] }
 tokio = { version = "1.48.0", features = ["rt-multi-thread", "sync"] }
-fastqueue-worker = { path = "./fastqueue-worker" }
-fastqueue-common = { path = "./fastqueue-common"}
-log = "0.4.29"
-pyo3-log = "0.13.2"
+fastqueue-worker = { path = "./crates/fastqueue-worker" }
+fastqueue-common = { path = "./crates/fastqueue-common"}
+redis = "1.0.2"
+uuid = { version = "1.19.0", features = ["v4"] }

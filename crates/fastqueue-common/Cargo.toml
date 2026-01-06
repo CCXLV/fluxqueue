@@ -13,3 +13,11 @@ rmp-serde = "1.3.1"
 rmpv = { version = "1.3.1", features = ["with-serde"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde-pyobject = "0.8.0"
+
+# Optional dependencies
+redis = "1.0.2"
+tokio = { version = "1.49.0", features = ["rt"], optional = true }
+signal = "0.7.0"
+
+[features]
+async = ["dep:tokio", "redis/tokio-comp", "redis/connection-manager"]

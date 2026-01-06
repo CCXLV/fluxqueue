@@ -2,9 +2,11 @@ import logging
 
 from fastqueue import FastQueue
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
-fastqueue = FastQueue()
+fastqueue = FastQueue(redis_url="redis://127.0.0.1:6380")
 
 
 @fastqueue.task()

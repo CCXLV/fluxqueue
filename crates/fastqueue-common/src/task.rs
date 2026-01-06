@@ -10,8 +10,8 @@ pub struct Task {
     pub name: String,
     pub args: Vec<u8>,
     pub kwargs: Vec<u8>,
-    pub timestamp: i64,
-    pub retries: u32,
+    pub created_at: u64,
+    pub retries: u8,
 }
 
 pub struct TaskRegistry {
