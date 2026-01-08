@@ -18,29 +18,7 @@ impl FastQueueCore {
         Self { redis_url }
     }
 
-    fn register_task(&self, name: String, module_path: String) -> PyResult<()> {
-        let redis_client = redis_client::RedisClient::new(&self.redis_url)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e)))?;
-        redis_client
-            .register_task(name, module_path)
-            .map_err(|e| PyRuntimeError::new_err(e))?;
-
-        Ok(())
-    }
-
-    async fn register_task_async(&self, name: String, module_path: String) -> PyResult<()> {
-        let redis_client = fastqueue_worker::RedisClient::new(&self.redis_url, None)
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e)))?;
-        redis_client
-            .register_task(name, module_path)
-            .await
-            .map_err(|e| PyRuntimeError::new_err(e))?;
-
-        Ok(())
-    }
-
-    async fn enqueue(
+    fn _enqueue(
         &self,
         name: String,
         args: Py<PyTuple>,
@@ -58,7 +36,7 @@ impl FastQueueCore {
         Ok(())
     }
 
-    async fn enqueue_async(
+    async fn _enqueue_async(
         &self,
         name: String,
         args: Py<PyTuple>,

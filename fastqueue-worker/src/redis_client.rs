@@ -28,22 +28,6 @@ impl RedisClient {
         Ok(Self { conn_manager })
     }
 
-    pub async fn register_task(&self, name: String, module_path: String) -> Result<(), Error> {
-        let mut conn = self.conn_manager.clone();
-        let _: () = redis::cmd("SET")
-            .arg(format!("{}{}", redis_keys::TASK_REGISTRY, name))
-            .arg(module_path)
-            .query_async(&mut conn)
-            .await
-            .map_err(|e| {
-                Error::new(
-                    ErrorKind::Other,
-                    format!("Failed to register the task: {}", e),
-                )
-            })?;
-        Ok(())
-    }
-
     pub async fn push_task(&self, task_blob: Vec<u8>) -> Result<(), Error> {
         let mut conn = self.conn_manager.clone();
         let _: () = redis::cmd("LPUSH")

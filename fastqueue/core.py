@@ -22,7 +22,6 @@ class FastQueue:
 
         def decorator(func: Callable[P, R]) -> Callable[P, None]:
             task_name = name if name else func.__name__
-            self._core.register_task(task_name, func)
 
             if inspect.iscoroutinefunction(func):
                 raise TypeError(
@@ -31,7 +30,7 @@ class FastQueue:
 
             @wraps(func)
             def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
-                self._core.enqueue(task_name, args, kwargs)
+                self._core._enqueue(task_name, args, kwargs)
                 return None
 
             return sync_wrapper
@@ -52,7 +51,6 @@ class AsyncFastQueue:
 
         async def decorator(func: Callable[P, R]) -> Coroutine[Callable[P, R]]:
             task_name = name if name else func.__name__
-            await self._core.register_task_async(task_name, func)
 
             if not inspect.iscoroutinefunction(func):
                 raise TypeError(
@@ -63,7 +61,7 @@ class AsyncFastQueue:
             async def wrapper(
                 *args: P.args, **kwargs: P.kwargs
             ) -> Coroutine[None]:
-                await self._core.enqueue_async(task_name, args, kwargs)
+                await self._core._enqueue_async(task_name, args, kwargs)
                 return None
 
             return wrapper

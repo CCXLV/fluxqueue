@@ -1,3 +1,7 @@
+use pyo3::Python;
+use pyo3::types::{PyAnyMethods, PyModule};
+use std::ffi::CString;
+use std::fs;
 use std::io::Error;
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,20 +12,27 @@ use redis::aio::ConnectionManagerConfig;
 
 use crate::redis_client::RedisClient;
 
-pub async fn run_worker(redis_url: String, num_workers: usize) -> Result<(), Error> {
-    tracing_subscriber::fmt()
-        .with_env_filter("fastqueue_worker=debug")
-        .with_target(false)
-        .init();
-
-    info!("Starting FastQueue worker");
-    info!("Workers: {}", num_workers);
-    info!("Redis: {}", redis_url);
-    info!("{}", "-".repeat(35));
-
+pub async fn run_worker(
+    num_workers: usize,
+    redis_url: String,
+    tasks_module_path: String,
+) -> Result<(), Error> {
     let redis_config =
         ConnectionManagerConfig::default().set_response_timeout(Some(Duration::from_secs(5)));
     let redis_client = Arc::new(RedisClient::new(&redis_url, Some(redis_config)).await?);
+
+    info!("Workers: {}", num_workers);
+    info!("Redis: {}", redis_url);
+    info!("Tasks module path: {}", tasks_module_path);
+
+    info!("Finding tasks to register...");
+    let task_functions = get_task_functions(tasks_module_path)?;
+    info!("Registering tasks: {:?}", task_functions);
+
+    info!(
+        "{}",
+        "-----------------------------------------------------------------------------------------------------"
+    );
 
     let mut workers = JoinSet::new();
 
@@ -63,4 +74,28 @@ pub async fn run_worker(redis_url: String, num_workers: usize) -> Result<(), Err
     }
 
     Ok(())
+}
+
+fn get_task_functions(module_path: String) -> Result<Vec<String>, Error> {
+    let script = fs::read_to_string("fastqueue-worker/scripts/get_functions.py")?;
+    let script_cstr = CString::new(script)?;
+    let filename = CString::new("get_functions.py")?;
+    let module_name = CString::new("get_functions")?;
+
+    Python::initialize();
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            script_cstr.as_c_str(),
+            filename.as_c_str(),
+            module_name.as_c_str(),
+        )?;
+
+        let funcs: Vec<String> = module
+            .getattr("list_functions")?
+            .call1((module_path,))?
+            .extract()?;
+
+        Ok(funcs)
+    })
 }
