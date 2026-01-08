@@ -2,12 +2,23 @@ use std::io::Error;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinSet;
+use tracing::info;
 
 use redis::aio::ConnectionManagerConfig;
 
 use crate::redis_client::RedisClient;
 
 pub async fn run_worker(redis_url: String, num_workers: usize) -> Result<(), Error> {
+    tracing_subscriber::fmt()
+        .with_env_filter("fastqueue_worker=debug")
+        .with_target(false)
+        .init();
+
+    info!("Starting FastQueue worker");
+    info!("Workers: {}", num_workers);
+    info!("Redis: {}", redis_url);
+    info!("{}", "-".repeat(35));
+
     let redis_config =
         ConnectionManagerConfig::default().set_response_timeout(Some(Duration::from_secs(5)));
     let redis_client = Arc::new(RedisClient::new(&redis_url, Some(redis_config)).await?);
