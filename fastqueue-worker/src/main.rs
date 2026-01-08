@@ -1,27 +1,43 @@
 use clap::Parser;
-use std::env;
 use tracing::{error, info, warn};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    #[arg(short, long, default_value = "4", help = "Number of workers to run.")]
-    workers: Option<usize>,
+    #[arg(
+        short,
+        long,
+        default_value_t = 4,
+        env = "FASTQUEUE_WORKERS",
+        help = "Number of workers to run."
+    )]
+    workers: usize,
 
     #[arg(
         short,
         long,
         default_value = "redis://127.0.0.1:6379",
+        env = "FASTQUEUE_REDIS_URL",
         help = "Redis URL to connect to."
     )]
-    redis_url: Option<String>,
+    redis_url: String,
 
     #[arg(
         short,
         long,
+        env = "FASTQUEUE_TASKS_MODULE_PATH",
         help = "Module path where the task functions are exported or located,."
     )]
-    tasks_module_path: Option<String>,
+    tasks_module_path: String,
+
+    #[arg(
+        short,
+        long,
+        default_value = "default",
+        env = "FASTQUEUE_QUEUE",
+        help = "Name of the queue if you plan to run multiple worker processes."
+    )]
+    queue: String,
 }
 
 #[tokio::main]
@@ -33,28 +49,15 @@ async fn main() -> Result<(), std::io::Error> {
 
     let args = Cli::parse();
 
-    let workers = args
-        .workers
-        .or_else(|| env::var("WORKERS").ok().and_then(|v| v.parse().ok()))
-        .unwrap_or(4);
-    let redis_url = args
-        .redis_url
-        .or_else(|| env::var("REDIS_URL").ok().and_then(|v| v.parse().ok()))
-        .unwrap_or("redis://127.0.0.1:6379".to_string());
-
-    let tasks_module_path = args
-        .tasks_module_path
-        .or_else(|| {
-            env::var("TASKS_MODULE_PATH")
-                .ok()
-                .and_then(|v| v.parse().ok())
-        })
-        .expect("TASKS_MODULE_PATH must be passed.");
-
     info!("Starting FastQueue worker. Press Ctrl+C to exit gracefully.");
 
     tokio::select! {
-        res = fastqueue_worker::run_worker(workers, redis_url, tasks_module_path) => {
+        res = fastqueue_worker::run_worker(
+            args.workers,
+            args.redis_url,
+            args.tasks_module_path,
+            args.queue
+        ) => {
             if let Err(e) = res {
                 error!("Worker stopped with error: {}", e);
             }

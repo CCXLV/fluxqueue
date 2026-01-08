@@ -28,10 +28,10 @@ impl RedisClient {
         Ok(Self { conn_manager })
     }
 
-    pub async fn push_task(&self, task_blob: Vec<u8>) -> Result<(), Error> {
+    pub async fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<(), Error> {
         let mut conn = self.conn_manager.clone();
         let _: () = redis::cmd("LPUSH")
-            .arg(redis_keys::TASK_QUEUE)
+            .arg(format!("{}:{}", redis_keys::TASK_QUEUE, queue_name))
             .arg(task_blob)
             .query_async(&mut conn)
             .await
@@ -48,10 +48,12 @@ impl RedisClient {
     pub async fn mark_task_as_processing(
         &self,
         conn: &mut ConnectionManager,
+        queue_name: &str,
+        worker_id: &str,
     ) -> Result<Option<Vec<u8>>, Error> {
         let raw_data: Option<Vec<u8>> = redis::cmd("BLMOVE")
-            .arg(redis_keys::TASK_QUEUE)
-            .arg(redis_keys::PROCESSING)
+            .arg(format!("{}:{}", redis_keys::TASK_QUEUE, queue_name))
+            .arg(format!("{}:{}", redis_keys::PROCESSING, worker_id))
             .arg("RIGHT")
             .arg("LEFT")
             .arg(1)

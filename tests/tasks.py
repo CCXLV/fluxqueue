@@ -1,4 +1,4 @@
-from ._core import fastqueue
+from tests._core import fastqueue
 
 
 @fastqueue.task()

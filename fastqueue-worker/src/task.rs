@@ -12,6 +12,7 @@ pub struct Task {
     pub kwargs: Vec<u8>,
     pub created_at: u64,
     pub retries: u8,
+    pub max_retries: u8,
 }
 
 pub struct TaskRegistry {

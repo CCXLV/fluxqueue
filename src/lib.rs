@@ -13,7 +13,11 @@ pub struct FastQueueCore {
 #[pymethods]
 impl FastQueueCore {
     #[new]
-    #[pyo3(signature = (redis_url="redis://127.0.0.1:6379".to_string()))]
+    #[pyo3(
+        signature = (
+            redis_url = "redis://127.0.0.1:6379".to_string(),
+        )
+    )]
     fn new(redis_url: String) -> Self {
         Self { redis_url }
     }
@@ -21,16 +25,18 @@ impl FastQueueCore {
     fn _enqueue(
         &self,
         name: String,
+        queue_name: String,
+        max_retries: u8,
         args: Py<PyTuple>,
         kwargs: Option<Py<PyDict>>,
     ) -> PyResult<()> {
         let redis_client = redis_client::RedisClient::new(&self.redis_url)
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e)))?;
 
-        let task_blob = fastqueue_worker::serialize_task(name, args, kwargs)?;
+        let task_blob = fastqueue_worker::serialize_task(name, max_retries, args, kwargs)?;
 
         let _ = redis_client
-            .push_task(task_blob)
+            .push_task(queue_name, task_blob)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
         Ok(())
@@ -39,6 +45,8 @@ impl FastQueueCore {
     async fn _enqueue_async(
         &self,
         name: String,
+        queue_name: String,
+        max_retries: u8,
         args: Py<PyTuple>,
         kwargs: Option<Py<PyDict>>,
     ) -> PyResult<()> {
@@ -46,10 +54,10 @@ impl FastQueueCore {
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e)))?;
 
-        let task_blob = fastqueue_worker::serialize_task(name, args, kwargs)?;
+        let task_blob = fastqueue_worker::serialize_task(name, max_retries, args, kwargs)?;
 
         let _ = redis_client
-            .push_task(task_blob)
+            .push_task(queue_name, task_blob)
             .await
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 

@@ -1,8 +1,6 @@
-from collections.abc import Coroutine
-from typing import ParamSpec, TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
-P = ParamSpec("P")
 
 class FastQueueCore:
     """
@@ -15,15 +13,27 @@ class FastQueueCore:
         """
         ...
 
-    def _enqueue(self, name: str, *args: P.args, **kwargs: P.kwargs) -> None:
+    def _enqueue(
+        self,
+        name: str,
+        queue_name: str,
+        max_retries: int,
+        *args: Any,
+        **kwargs: Any
+    ) -> None:
         """
         Enqueue a function for background execution.
         """
         ...
 
     async def _enqueue_async(
-        self, name: str, *args: P.args, **kwargs: P.kwargs
-    ) -> Coroutine[None]:
+        self,
+        name: str,
+        queue_name: str,
+        max_retries: int,
+        *args: Any,
+        **kwargs: Any
+    ) -> None:
         """
         Enqueue a function for background execution.
         """

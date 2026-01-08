@@ -10,6 +10,7 @@ use crate::task::Task;
 
 pub fn serialize_task(
     name: String,
+    max_retries: u8,
     args: Py<PyTuple>,
     kwargs: Option<Py<PyDict>>,
 ) -> Result<Vec<u8>, Error> {
@@ -37,6 +38,7 @@ pub fn serialize_task(
             .unwrap()
             .as_secs(),
         retries: 0,
+        max_retries,
     };
 
     let task_blob = serialize_task_data(&task)?;

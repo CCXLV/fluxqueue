@@ -1,7 +1,7 @@
 import inspect
 from collections.abc import Callable, Coroutine
 from functools import wraps
-from typing import ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 from .fastqueue_core import FastQueueCore
 
@@ -14,7 +14,11 @@ class FastQueue:
         self._core = FastQueueCore(redis_url=redis_url)
 
     def task(
-        self, *, name: str | None = None
+        self,
+        *,
+        name: str | None = None,
+        queue: str = "default",
+        max_retries: int = 3
     ) -> Callable[[Callable[P, R]], Callable[P, None]]:
         """
         Decorator for wrapping a function to be enqueued in the fastqueue.
@@ -30,7 +34,9 @@ class FastQueue:
 
             @wraps(func)
             def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
-                self._core._enqueue(task_name, args, kwargs)
+                self._core._enqueue(
+                    task_name, queue, max_retries, args, kwargs
+                )
                 return None
 
             return sync_wrapper
@@ -42,14 +48,23 @@ class AsyncFastQueue:
     def __init__(self, redis_url: str | None = "redis://127.0.0.1:6379"):
         self._core = FastQueueCore(redis_url=redis_url)
 
-    async def task(
-        self, *, name: str | None = None
-    ) -> Coroutine[Callable[[Callable[P, R]], Callable[P, None]]]:
+    def task(
+        self,
+        *,
+        name: str | None = None,
+        queue: str = "default",
+        max_retries: int = 3
+    ) -> Callable[
+        [Callable[P, Coroutine[Any, Any, R]]],
+        Callable[P, Coroutine[Any, Any, None]],
+    ]:
         """
         Decorator for wrapping a function to be enqueued in the fastqueue.
         """
 
-        async def decorator(func: Callable[P, R]) -> Coroutine[Callable[P, R]]:
+        def decorator(
+            func: Callable[P, Coroutine[Any, Any, R]],
+        ) -> Callable[P, Coroutine[Any, Any, None]]:
             task_name = name if name else func.__name__
 
             if not inspect.iscoroutinefunction(func):
@@ -58,10 +73,10 @@ class AsyncFastQueue:
                 )
 
             @wraps(func)
-            async def wrapper(
-                *args: P.args, **kwargs: P.kwargs
-            ) -> Coroutine[None]:
-                await self._core._enqueue_async(task_name, args, kwargs)
+            async def wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
+                await self._core._enqueue_async(
+                    task_name, queue, max_retries, args, kwargs
+                )
                 return None
 
             return wrapper

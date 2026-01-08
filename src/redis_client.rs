@@ -13,10 +13,10 @@ impl RedisClient {
         Ok(Self { client })
     }
 
-    pub fn push_task(&self, task_blob: Vec<u8>) -> Result<(), Error> {
+    pub fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<(), Error> {
         let mut conn = self.client.clone();
         let _: () = redis::cmd("LPUSH")
-            .arg(redis_keys::TASK_QUEUE)
+            .arg(format!("{}:{}", redis_keys::TASK_QUEUE, queue_name))
             .arg(task_blob)
             .query(&mut conn)
             .map_err(|e| {
