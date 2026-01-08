@@ -1,7 +1,6 @@
 use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyModule};
 use pyo3::{Bound, Py, PyAny, Python};
 use std::ffi::CString;
-use std::fs;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;
@@ -106,7 +105,7 @@ pub async fn run_worker(
 }
 
 fn get_task_functions(module_path: String) -> Result<Vec<(String, Py<PyAny>)>, Error> {
-    let script = fs::read_to_string("fastqueue-worker/scripts/get_functions.py")?;
+    let script = include_str!("../scripts/get_functions.py");
     let script_cstr = CString::new(script)?;
     let filename = CString::new("get_functions.py")?;
     let module_name = CString::new("get_functions")?;
