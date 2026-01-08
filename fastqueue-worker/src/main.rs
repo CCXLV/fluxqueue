@@ -5,7 +5,7 @@ async fn main() -> Result<(), std::io::Error> {
     let num_workers: usize = std::env::var("WORKERS")
         .unwrap_or("4".into())
         .parse()
-        .expect("msg");
+        .expect("WORKERS must be a positive integer");
 
     fastqueue_worker::run_worker(redis_url, num_workers).await
 }
