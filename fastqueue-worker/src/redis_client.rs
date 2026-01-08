@@ -3,7 +3,6 @@ use std::io::{Error, ErrorKind};
 
 use crate::config::redis_keys;
 
-#[derive()]
 pub struct RedisClient {
     pub(crate) conn_manager: ConnectionManager,
 }

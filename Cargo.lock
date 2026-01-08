@@ -117,10 +117,8 @@ version = "0.0.1"
 dependencies = [
  "fastqueue-worker",
  "pyo3",
- "pyo3-async-runtimes",
  "redis",
  "tokio",
- "uuid",
 ]
 
 [[package]]

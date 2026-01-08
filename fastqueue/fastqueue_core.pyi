@@ -1,7 +1,8 @@
-from collections.abc import Callable
-from typing import TypeVar
+from collections.abc import Coroutine
+from typing import ParamSpec, TypeVar
 
 T = TypeVar("T")
+P = ParamSpec("P")
 
 class FastQueueCore:
     """
@@ -14,29 +15,30 @@ class FastQueueCore:
         """
         ...
 
-    def register_task(self, name: str, func: Callable[..., T]) -> None:
+    def register_task(self, name: str, module_path: str) -> None:
         """
         Register a new task at startup
         """
         ...
 
-    def enqueue(
-        self,
-        func: Callable[..., T],
-    ) -> None:
+    async def register_task_async(
+        self, name: str, module_path: str
+    ) -> Coroutine[None]:
+        """
+        Register a new task at startup
+        """
+        ...
+
+    def enqueue(self, name: str, *args: P.args, **kwargs: P.kwargs) -> None:
         """
         Enqueue a function for background execution.
         """
         ...
 
-    def shutdown(self) -> None:
+    async def enqueue_async(
+        self, name: str, *args: P.args, **kwargs: P.kwargs
+    ) -> Coroutine[None]:
         """
-        Sync shutdown
-        """
-        ...
-
-    async def async_shutdown(self) -> None:
-        """
-        Async shutdown
+        Enqueue a function for background execution.
         """
         ...
