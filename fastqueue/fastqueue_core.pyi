@@ -1,5 +1,4 @@
-from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
@@ -14,29 +13,28 @@ class FastQueueCore:
         """
         ...
 
-    def register_task(self, name: str, func: Callable[..., T]) -> None:
-        """
-        Register a new task at startup
-        """
-        ...
-
-    def enqueue(
+    def _enqueue(
         self,
-        func: Callable[..., T],
+        name: str,
+        queue_name: str,
+        max_retries: int,
+        *args: Any,
+        **kwargs: Any
     ) -> None:
         """
         Enqueue a function for background execution.
         """
         ...
 
-    def shutdown(self) -> None:
+    async def _enqueue_async(
+        self,
+        name: str,
+        queue_name: str,
+        max_retries: int,
+        *args: Any,
+        **kwargs: Any
+    ) -> None:
         """
-        Sync shutdown
-        """
-        ...
-
-    async def async_shutdown(self) -> None:
-        """
-        Async shutdown
+        Enqueue a function for background execution.
         """
         ...
