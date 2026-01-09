@@ -30,6 +30,8 @@ impl FastQueueCore {
         args: Py<PyTuple>,
         kwargs: Option<Py<PyDict>>,
     ) -> PyResult<()> {
+        // Connecting to redis on every queue is not ideal, instead the connection should happen at class initialization
+        // and then use the redis client directly in here and for async enqueue function handle it differently
         let redis_client = redis_client::RedisClient::new(&self.redis_url)
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e)))?;
 
