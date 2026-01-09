@@ -1,3 +1,3 @@
-from .core import FastQueue
+from .core import AsyncFastQueue, FastQueue
 
-__all__ = ["FastQueue"]
+__all__ = ["AsyncFastQueue", "FastQueue"]

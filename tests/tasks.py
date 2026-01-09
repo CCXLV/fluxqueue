@@ -1,7 +1,7 @@
 from tests._core import fastqueue
 
 
-@fastqueue.task()
+@fastqueue.task(name="name-print")
 def print_name(name: str):
     print(f"Name: {name}")
 

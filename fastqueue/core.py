@@ -4,6 +4,7 @@ from functools import wraps
 from typing import Any, ParamSpec, TypeVar
 
 from .fastqueue_core import FastQueueCore
+from .utils import get_task_name
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -25,7 +26,8 @@ class FastQueue:
         """
 
         def decorator(func: Callable[P, R]) -> Callable[P, None]:
-            task_name = name if name else func.__name__
+            task_name = get_task_name(func, name)
+            func.task_name = task_name
 
             if inspect.iscoroutinefunction(func):
                 raise TypeError(
@@ -65,7 +67,8 @@ class AsyncFastQueue:
         def decorator(
             func: Callable[P, Coroutine[Any, Any, R]],
         ) -> Callable[P, Coroutine[Any, Any, None]]:
-            task_name = name if name else func.__name__
+            task_name = get_task_name(func, name)
+            func.task_name = task_name
 
             if not inspect.iscoroutinefunction(func):
                 raise TypeError(
