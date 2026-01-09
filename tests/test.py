@@ -1,15 +1,19 @@
-from flask import Flask
+import logging
 
-from tests.tasks import print_name
+from fastqueue import FastQueue
 
-app = Flask(__name__)
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
-
-@app.route("/<name>")
-def index(name: str):
-    print_name(name)
-    return {"message": "Printed name"}, 200
+fastqueue = FastQueue(redis_url="redis://127.0.0.1:6380")
 
 
-if __name__ == "__main__":
-    app.run(debug=True)
+@fastqueue.task()
+def test_name():
+    print(f"Name: Giorgi")
+
+
+test_name()
+
+fastqueue.close()
