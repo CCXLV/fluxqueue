@@ -5,7 +5,9 @@ build-backend = "maturin"
 [project]
 name = "fastqueue"
 version = "0.0.1"
-dependencies = ["maturin"]
+dependencies = [
+    "maturin"
+]
 
 [project.optional-dependencies]
 dev = ["black", "ruff"]
@@ -23,21 +25,26 @@ preview = true
 [tool.ruff]
 [tool.ruff.lint]
 select = [
-  "E",   # pycodestyle errors
-  "W",   # pycodestyle warnings
-  "F",   # pyflakes
-  "I",   # isort
-  "C",   # flake8-comprehensions
-  "B",   # flake8-bugbear
-  "UP",  # pyupgrade
-  "N",   # pep8-naming
-  "SIM", # flake8-simplify
-  "RUF", # ruff-specific rules
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "C",   # flake8-comprehensions
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific rules
 ]
 ignore = [
-  "E501", # line too long, handled by black
-  "B008", # do not perform function calls in argument defaults
-  "C901", # complexity
-  "N806", # variable in function should be lowercase (allows CamelCase for pydantic models)
+    "E501", # line too long, handled by black
+    "B008", # do not perform function calls in argument defaults
+    "C901", # complexity
+    "N806", # variable in function should be lowercase (allows CamelCase for pydantic models)
 ]
-exclude = [".git", ".ruff_cache", ".venv", "tests/**"]
+exclude = [
+    ".git",
+    ".ruff_cache",
+    ".venv",
+    "tests/**"
+]

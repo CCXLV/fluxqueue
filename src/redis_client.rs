@@ -1,30 +1,26 @@
-use fastqueue_worker::{get_redis_client, redis_keys};
+use fastqueue_worker::{Task, serialize_task_data};
 use std::io::{Error, ErrorKind};
 
-/// Synchronous RedisClient for core usage.
-pub struct RedisClient {
-    pub(crate) client: redis::Client,
-}
+pub fn push_task(redis_client: &redis::Client, task: Task) -> Result<(), Error> {
+    let mut conn = redis_client.get_connection().map_err(|e| {
+        Error::new(
+            ErrorKind::ConnectionRefused,
+            format!("Failed to get redis connection: {}", e),
+        )
+    })?;
 
-impl RedisClient {
-    pub fn new(redis_url: &str) -> Result<Self, Error> {
-        let client = get_redis_client(&redis_url)?;
+    let task_blob = serialize_task_data(&task)?;
 
-        Ok(Self { client })
-    }
+    let _: () = redis::cmd("LPUSH")
+        .arg("fastqueue:tasks")
+        .arg(task_blob)
+        .query(&mut conn)
+        .map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("Failed to push task to redis: {}", e),
+            )
+        })?;
 
-    pub fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<(), Error> {
-        let mut conn = self.client.clone();
-        let _: () = redis::cmd("LPUSH")
-            .arg(format!("{}:{}", redis_keys::TASK_QUEUE, queue_name))
-            .arg(task_blob)
-            .query(&mut conn)
-            .map_err(|e| {
-                Error::new(
-                    ErrorKind::Other,
-                    format!("Failed to push task to redis: {}", e),
-                )
-            })?;
-        Ok(())
-    }
+    Ok(())
 }
