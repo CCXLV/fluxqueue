@@ -7,7 +7,7 @@ def list_functions(module_path: str):
     funcs = {}
     for _name, obj in inspect.getmembers(module):
         if inspect.isfunction(obj) or (
-            inspect.isbuiltin(obj) and obj.task_name
+            inspect.isbuiltin(obj) and obj.task_name  # pyright: ignore
         ):
-            funcs[obj.task_name] = obj
+            funcs[obj.task_name] = obj  # pyright: ignore
     return funcs
