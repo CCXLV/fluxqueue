@@ -28,6 +28,62 @@ impl RedisClient {
         Ok(Self { conn_manager })
     }
 
+    pub async fn register_worker(&self, queue_name: &str, worker_id: &str) -> Result<(), Error> {
+        let mut conn = self.conn_manager.clone();
+        let script = include_str!("../scripts/lua/register_worker.lua");
+
+        let _: () = redis::cmd("EVAL")
+            .arg(script)
+            .arg(1)
+            .arg(format!("{}:{}", redis_keys::WORKERS, queue_name))
+            .arg(worker_id)
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("Failed to register the worker: {}", e),
+                )
+            })?;
+
+        Ok(())
+    }
+
+    pub async fn check_queue(&self, queue_name: &str) -> Result<bool, Error> {
+        let mut conn = self.conn_manager.clone();
+        let queue: bool = redis::cmd("EXISTS")
+            .arg(format!("{}:{}", redis_keys::WORKERS, queue_name))
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("Failed to check queue name: {}", e),
+                )
+            })?;
+        Ok(queue)
+    }
+
+    pub async fn cleanup_worker_registry(&self, queue_name: &str) -> Result<usize, Error> {
+        let mut conn = self.conn_manager.clone();
+        let script = include_str!("../scripts/lua/cleanup_worker_registry.lua");
+
+        let result: usize = redis::cmd("EVAL")
+            .arg(script)
+            .arg(1)
+            .arg(format!("{}:{}", redis_keys::WORKERS, queue_name))
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("Failed to cleanup the worker registry: {}", e),
+                )
+            })?;
+
+        Ok(result)
+    }
+
     pub async fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<(), Error> {
         let mut conn = self.conn_manager.clone();
         let _: () = redis::cmd("LPUSH")

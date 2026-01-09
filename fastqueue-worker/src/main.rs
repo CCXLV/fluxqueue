@@ -51,21 +51,29 @@ async fn main() -> Result<(), std::io::Error> {
 
     info!("Starting FastQueue worker. Press Ctrl+C to exit gracefully.");
 
-    tokio::select! {
-        res = fastqueue_worker::run_worker(
-            args.workers,
-            args.redis_url,
-            args.tasks_module_path,
-            args.queue
-        ) => {
-            if let Err(e) = res {
-                error!("Worker stopped with error: {}", e);
-            }
-        }
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
-        _ = tokio::signal::ctrl_c() => {
-            warn!("Shutdown signal received! Starting graceful shutdown...");
-        }
+    let redis_url = args.redis_url.clone();
+    let queue = args.queue.clone();
+    let tasks_module_path = args.tasks_module_path.clone();
+    let workers = args.workers;
+
+    let worker_handle = tokio::spawn(async move {
+        fastqueue_worker::run_worker(shutdown_rx, workers, &redis_url, tasks_module_path, &queue)
+            .await
+    });
+
+    tokio::signal::ctrl_c()
+        .await
+        .expect("Failed to listen for Ctrl+C");
+    warn!("Shutdown signal received! Starting graceful shutdown...");
+
+    let _ = shutdown_tx.send(true);
+
+    match worker_handle.await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => error!("Worker exited with error: {}", e),
+        Err(e) => error!("Worker task panicked: {}", e),
     }
 
     info!("Worker has shut down successfully.");
