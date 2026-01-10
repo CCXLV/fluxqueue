@@ -39,7 +39,7 @@ pub async fn run_worker(
     info!("Tasks module path: {}", tasks_module_path);
 
     info!("Finding tasks to register...");
-    let task_functions = get_task_functions(tasks_module_path)?;
+    let task_functions = get_task_functions(tasks_module_path, queue_name)?;
     let task_names: Vec<&String> = task_functions.iter().map(|(name, _obj)| name).collect();
 
     info!("Registering tasks: {:?}", task_names);
@@ -82,6 +82,18 @@ pub async fn run_worker(
         ));
     }
 
+    let janitor_queue_name = Arc::clone(&queue_name);
+    let janitor_redis = Arc::clone(&redis_client);
+    let janitor_manager = janitor_redis.conn_manager.clone();
+    let janitor_shutdown = shutdown.clone();
+
+    workers.spawn(janitor_loop(
+        janitor_shutdown,
+        janitor_queue_name,
+        janitor_redis,
+        janitor_manager,
+    ));
+
     shutdown.changed().await.ok();
 
     while let Some(res) = workers.join_next().await {
@@ -118,7 +130,7 @@ async fn worker_loop(
 
         tokio::select! {
             _ = shutdown.changed() => {
-                info!("Worker {} shutting down", worker_id);
+                info!("Worker {} shutting down...", worker_id);
                 break;
             }
 
@@ -142,7 +154,26 @@ async fn worker_loop(
     }
 }
 
-fn get_task_functions(module_path: String) -> Result<Vec<(String, Py<PyAny>)>, Error> {
+async fn janitor_loop(
+    mut shutdown: watch::Receiver<bool>,
+    _queue_name: Arc<String>,
+    _redis_client: Arc<RedisClient>,
+    mut _redis_manager: ConnectionManager,
+) {
+    loop {
+        tokio::select! {
+            _ = shutdown.changed() => {
+                info!("Janitor shutting down...");
+                break;
+            }
+        }
+    }
+}
+
+fn get_task_functions(
+    module_path: String,
+    queue_name: &str,
+) -> Result<Vec<(String, Py<PyAny>)>, Error> {
     let script = include_str!("../scripts/get_functions.py");
     let script_cstr = CString::new(script)?;
     let filename = CString::new("get_functions.py")?;
@@ -161,7 +192,7 @@ fn get_task_functions(module_path: String) -> Result<Vec<(String, Py<PyAny>)>, E
         let py_funcs: Bound<'_, PyDict> = module
             .getattr("list_functions")
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?
-            .call1((module_path,))
+            .call1((module_path, queue_name))
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?
             .cast_into()
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
