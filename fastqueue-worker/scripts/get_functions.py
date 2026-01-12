@@ -2,8 +2,6 @@ import importlib
 import inspect
 
 
-# TODO: Change the dict type since we also need to get max_retries of the task
-# which also causes the get_task_functions in worker.rs to change
 def list_functions(module_path: str, queue: str):
     module = importlib.import_module(module_path)
     funcs = {}
