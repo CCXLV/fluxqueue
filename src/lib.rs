@@ -1,13 +1,13 @@
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use redis::aio::ConnectionManager;
-use std::io::{Error, ErrorKind};
 
 use fastqueue_worker;
 
+mod redis_client;
+
 #[pyclass(subclass)]
 pub struct FastQueueCore {
-    pub(crate) redis_client: redis::Client,
+    pub(crate) redis_url: String,
 }
 
 #[pymethods]
@@ -18,12 +18,8 @@ impl FastQueueCore {
             redis_url = "redis://127.0.0.1:6379".to_string(),
         )
     )]
-    fn new(redis_url: String) -> PyResult<Self> {
-        let redist_client = fastqueue_worker::get_redis_client(&redis_url)
-            .map_err(|e| PyRuntimeError::new_err(e))?;
-        Ok(Self {
-            redis_client: redist_client,
-        })
+    fn new(redis_url: String) -> Self {
+        Self { redis_url }
     }
 
     fn _enqueue(
@@ -34,19 +30,15 @@ impl FastQueueCore {
         args: Py<PyTuple>,
         kwargs: Option<Py<PyDict>>,
     ) -> PyResult<()> {
+        // Connecting to redis on every queue is not ideal, instead the connection should happen at class initialization
+        // and then use the redis client directly in here and for async enqueue function handle it differently
+        let redis_client = redis_client::RedisClient::new(&self.redis_url)
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e)))?;
+
         let task_blob = fastqueue_worker::serialize_task(name, max_retries, args, kwargs)?;
 
-        let mut conn = self.redis_client.clone();
-        let _: () = redis::cmd("LPUSH")
-            .arg(get_task_key(queue_name))
-            .arg(task_blob)
-            .query(&mut conn)
-            .map_err(|e| {
-                Error::new(
-                    ErrorKind::Other,
-                    format!("Failed to push task to redis: {}", e),
-                )
-            })
+        let _ = redis_client
+            .push_task(queue_name, task_blob)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
         Ok(())
@@ -60,16 +52,14 @@ impl FastQueueCore {
         args: Py<PyTuple>,
         kwargs: Option<Py<PyDict>>,
     ) -> PyResult<()> {
-        let mut conn_manager = ConnectionManager::new(self.redis_client.clone())
+        let redis_client = fastqueue_worker::RedisClient::new(&self.redis_url, None)
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e)))?;
 
         let task_blob = fastqueue_worker::serialize_task(name, max_retries, args, kwargs)?;
 
-        let _: () = redis::cmd("LPUSH")
-            .arg(get_task_key(queue_name))
-            .arg(task_blob)
-            .query_async(&mut conn_manager)
+        let _ = redis_client
+            .push_task(queue_name, task_blob)
             .await
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
@@ -81,12 +71,4 @@ impl FastQueueCore {
 fn fastqueue_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FastQueueCore>()?;
     Ok(())
-}
-
-fn get_task_key(queue_name: String) -> String {
-    format!(
-        "{}:{}",
-        fastqueue_worker::redis_keys::TASK_QUEUE,
-        queue_name
-    )
 }

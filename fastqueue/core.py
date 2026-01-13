@@ -28,7 +28,6 @@ class FastQueue:
         def decorator(func: Callable[P, R]) -> Callable[P, None]:
             task_name = get_task_name(func, name)
             cast(Any, func).task_name = task_name
-            cast(Any, func).queue = queue
 
             if inspect.iscoroutinefunction(func):
                 raise TypeError(
@@ -70,7 +69,6 @@ class AsyncFastQueue:
         ) -> Callable[P, Coroutine[Any, Any, None]]:
             task_name = get_task_name(func, name)
             cast(Any, func).task_name = task_name
-            cast(Any, func).queue = queue
 
             if not inspect.iscoroutinefunction(func):
                 raise TypeError(
