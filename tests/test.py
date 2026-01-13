@@ -1,14 +1,15 @@
-from fastqueue import FastQueue
+from flask import Flask
 
-fastqueue = FastQueue()
+from tests.tasks import print_name
 
-
-@fastqueue.task()
-def test_name(name: str):
-    print(f"Name: {name}")
+app = Flask(__name__)
 
 
-test_name("George")
-test_name("John Doe")
+@app.route("/<name>")
+def index(name: str):
+    print_name(name)
+    return {"message": "Printed name"}, 200
 
-fastqueue.close()
+
+if __name__ == "__main__":
+    app.run(debug=True)
