@@ -21,7 +21,7 @@ impl FastQueueCore {
     )]
     fn new(redis_url: String) -> PyResult<Self> {
         let redist_client = fastqueue_worker::get_redis_client(&redis_url)
-            .map_err(|e| PyRuntimeError::new_err(e))?;
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         Ok(Self {
             redis_client: redist_client,
         })
@@ -35,7 +35,8 @@ impl FastQueueCore {
         args: Py<PyTuple>,
         kwargs: Option<Py<PyDict>>,
     ) -> PyResult<()> {
-        let task_blob = fastqueue_worker::serialize_task(name, max_retries, args, kwargs)?;
+        let task_blob = fastqueue_worker::serialize_task(name, max_retries, args, kwargs)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
         let mut conn = self.redis_client.clone();
         let _: () = redis::cmd("LPUSH")
