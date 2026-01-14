@@ -1,7 +1,7 @@
+use anyhow::Result;
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{Error, ErrorKind};
 use std::sync::{Arc, RwLock};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -28,12 +28,9 @@ impl TaskRegistry {
         }
     }
 
-    pub fn insert(&self, name: String, func: Py<PyAny>) -> Result<(), Error> {
+    pub fn insert(&self, name: String, func: Py<PyAny>) -> Result<()> {
         let mut tasks = self.tasks.write().map_err(|_| {
-            Error::new(
-                ErrorKind::Other,
-                "Internal Error: Task registry lock poisoned (a thread panicked)",
-            )
+            anyhow::anyhow!("Internal Error: Task registry lock poisoned (a thread panicked)")
         })?;
         tasks.insert(name, Arc::new(func));
         Ok(())

@@ -1,9 +1,9 @@
+use anyhow::{Context, Result};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
-use rmp_serde::{to_vec, to_vec_named};
+use rmp_serde::{from_slice, to_vec, to_vec_named};
 use rmpv::Value;
 use serde_pyobject::from_pyobject;
-use std::io::{Error, ErrorKind};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::task::Task;
@@ -13,7 +13,7 @@ pub fn serialize_task(
     max_retries: u8,
     args: Py<PyTuple>,
     kwargs: Option<Py<PyDict>>,
-) -> Result<Vec<u8>, Error> {
+) -> Result<Vec<u8>> {
     let arg_bytes = Python::attach(|py| {
         let bound_args = args.into_bound(py).into_any();
         serialize_python_to_msgpack(bound_args)
@@ -46,36 +46,21 @@ pub fn serialize_task(
     Ok(task_blob)
 }
 
-pub fn serialize_python_to_msgpack(object: Bound<'_, PyAny>) -> Result<Vec<u8>, Error> {
+pub fn serialize_python_to_msgpack(object: Bound<'_, PyAny>) -> Result<Vec<u8>> {
     let serialized_obj: Value =
-        from_pyobject(object).map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
+        from_pyobject(object).context("Failed to convert Python object to msgpack Value")?;
 
-    let bytes = to_vec_named(&serialized_obj).map_err(|e| {
-        Error::new(
-            ErrorKind::Other,
-            format!("msgpack serializaion failed: {}", e),
-        )
-    })?;
+    let bytes = to_vec_named(&serialized_obj).context("msgpack serialization failed")?;
 
     Ok(bytes)
 }
 
-pub fn deserialize_raw_task_data(raw_data: Vec<u8>) -> Result<Task, Error> {
-    let task: Task = rmp_serde::from_slice(&raw_data).map_err(|e| {
-        Error::new(
-            ErrorKind::Other,
-            format!("Failed to deserialize task data: {}", e),
-        )
-    })?;
+pub fn deserialize_raw_task_data(raw_data: Vec<u8>) -> Result<Task> {
+    let task: Task = from_slice(&raw_data).context("Failed to deserialize task data")?;
     Ok(task)
 }
 
-fn serialize_task_data(task: &Task) -> Result<Vec<u8>, Error> {
-    let blob = to_vec(task).map_err(|e| {
-        Error::new(
-            ErrorKind::Other,
-            format!("Failed to serialize task data: {}", e),
-        )
-    })?;
+fn serialize_task_data(task: &Task) -> Result<Vec<u8>> {
+    let blob = to_vec(task).context("Failed to serialize task data")?;
     Ok(blob)
 }

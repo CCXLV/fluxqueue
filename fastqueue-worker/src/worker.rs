@@ -1,16 +1,19 @@
-use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyModule};
+use anyhow::{Context, Result};
+use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyModule, PyTuple};
 use pyo3::{Bound, Py, PyAny, Python};
+use pythonize::pythonize;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
+use rmp_serde::from_slice;
 use std::ffi::CString;
-use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::redis_client::RedisClient;
+use crate::serialize::deserialize_raw_task_data;
 use crate::task::TaskRegistry;
 
 pub async fn run_worker(
@@ -19,7 +22,7 @@ pub async fn run_worker(
     redis_url: &str,
     tasks_module_path: String,
     queue_name: &str,
-) -> Result<(), Error> {
+) -> Result<()> {
     let redis_config =
         ConnectionManagerConfig::default().set_response_timeout(Some(Duration::from_secs(5)));
     let redis_client = Arc::new(RedisClient::new(&redis_url, Some(redis_config)).await?);
@@ -49,7 +52,7 @@ pub async fn run_worker(
         "-----------------------------------------------------------------------------------------------------"
     );
 
-    let task_registry = TaskRegistry::new();
+    let task_registry = Arc::new(TaskRegistry::new());
     for (name, task_obj) in task_functions {
         task_registry.insert(name, task_obj)?;
     }
@@ -68,6 +71,7 @@ pub async fn run_worker(
         let queue_name = Arc::clone(&queue_name);
         let worker_id = format!("{}:{}", instance_id, local_id);
         let shutdown = shutdown.clone();
+        let task_registry = Arc::clone(&task_registry);
 
         redis_client
             .register_worker(&queue_name, &worker_id)
@@ -79,6 +83,7 @@ pub async fn run_worker(
             worker_id,
             redis_client,
             redis_manager,
+            task_registry,
         ));
     }
 
@@ -113,7 +118,8 @@ async fn worker_loop(
     worker_id: String,
     redis_client: Arc<RedisClient>,
     mut redis_manager: ConnectionManager,
-) {
+    task_registry: Arc<TaskRegistry>,
+) -> Result<()> {
     loop {
         // The process
         // 1. Task comes in -> check if its in task_registry or not
@@ -131,7 +137,7 @@ async fn worker_loop(
         tokio::select! {
             _ = shutdown.changed() => {
                 info!("Worker {} shutting down...", worker_id);
-                break;
+                return Ok(())
             }
 
             res = redis_client
@@ -139,7 +145,7 @@ async fn worker_loop(
             => {
                 match res {
                     Ok(Some(raw_data)) => {
-                        info!("Worker {} got task ({} bytes)", worker_id, raw_data.len());
+                        run_task(raw_data, &task_registry).await?;
                     }
                     Ok(None) => {
                         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -159,21 +165,18 @@ async fn janitor_loop(
     _queue_name: Arc<String>,
     _redis_client: Arc<RedisClient>,
     mut _redis_manager: ConnectionManager,
-) {
+) -> Result<()> {
     loop {
         tokio::select! {
             _ = shutdown.changed() => {
                 info!("Janitor shutting down...");
-                break;
+                return Ok(())
             }
         }
     }
 }
 
-fn get_task_functions(
-    module_path: String,
-    queue_name: &str,
-) -> Result<Vec<(String, Py<PyAny>)>, Error> {
+fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(String, Py<PyAny>)>> {
     let script = include_str!("../scripts/get_functions.py");
     let script_cstr = CString::new(script)?;
     let filename = CString::new("get_functions.py")?;
@@ -187,15 +190,15 @@ fn get_task_functions(
             filename.as_c_str(),
             module_name.as_c_str(),
         )
-        .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        .context("Failed to import python module")?;
 
         let py_funcs: Bound<'_, PyDict> = module
             .getattr("list_functions")
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?
+            .context("Failed to find 'list_functions'")?
             .call1((module_path, queue_name))
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?
-            .cast_into()
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+            .context("Failed to execute 'list_functions'")?
+            .cast_into::<PyDict>()
+            .map_err(|_| anyhow::anyhow!("Failed to cast result to a Python Dictionary"))?;
 
         let funcs: Vec<_> = py_funcs
             .iter()
@@ -208,4 +211,63 @@ fn get_task_functions(
 
         Ok(funcs)
     })
+}
+
+async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Result<()> {
+    let task = deserialize_raw_task_data(task_raw_data)?;
+
+    let Some(task_function) = task_registry.get(&task.name) else {
+        warn!("Task '{}' not found in registry. Skipping.", task.name);
+        return Ok(());
+    };
+
+    info!("Task function: {}", task_function);
+
+    let task_args: rmpv::Value = from_slice(&task.args).context(format!(
+        "Failed to deserialize task {} function args",
+        task.name
+    ))?;
+    let task_kwargs: rmpv::Value = from_slice(&task.kwargs).context(format!(
+        "Failed to deserialize task {} function kwargs",
+        task.name
+    ))?;
+
+    info!("Args {}", task_args);
+    info!("Kwargs {}", task_kwargs);
+
+    Python::attach(|py| -> Result<()> {
+        let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
+        info!("1: {}", py_args);
+        let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
+        info!("2: {}", py_kwargs);
+
+        let args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
+            list.to_tuple()
+        } else if let Ok(tuple) = py_args.cast::<PyTuple>() {
+            tuple.clone()
+        } else {
+            anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
+        };
+        info!("3: {}", args_tuple);
+        let kwargs_dict = py_kwargs
+            .cast_into::<PyDict>()
+            .map_err(|_| anyhow::anyhow!("Kwargs must be a map/dict"))?;
+
+        info!("Py Args {}", args_tuple);
+        info!("Py Kwargs {}", kwargs_dict);
+
+        let result_object = task_function.call(py, args_tuple, Some(&kwargs_dict))?;
+        let bound_result = result_object.bind(py);
+
+        let is_awaitable = bound_result
+            .hasattr("__await__")
+            .map_err(|_| anyhow::anyhow!("Failed to get the function attribute"))?;
+        info!("Is awaitable: {}", is_awaitable);
+
+        // TODO: Remove task from redis
+
+        Ok(())
+    })?;
+
+    Ok(())
 }
