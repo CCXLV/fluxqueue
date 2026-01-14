@@ -62,6 +62,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.100"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
+
+[[package]]
 name = "arc-swap"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -194,9 +200,11 @@ dependencies = [
 name = "fastqueue-worker"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "pyo3",
  "pyo3-async-runtimes",
+ "pythonize",
  "redis",
  "rmp-serde",
  "rmpv",
@@ -214,6 +222,7 @@ version = "0.0.1"
 dependencies = [
  "fastqueue-worker",
  "pyo3",
+ "pyo3-async-runtimes",
  "redis",
  "tokio",
 ]
@@ -695,6 +704,16 @@ dependencies = [
  "pyo3-build-config",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "pythonize"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3a8f29db331e28c332c63496cfcbb822aca3d7320bc08b655d7fd0c29c50ede"
+dependencies = [
+ "pyo3",
+ "serde",
 ]
 
 [[package]]
