@@ -1,5 +1,6 @@
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
+use pyo3_async_runtimes::tokio::future_into_py;
 use redis::aio::ConnectionManager;
 use std::io::{Error, ErrorKind};
 
@@ -20,7 +21,7 @@ impl FastQueueCore {
     )]
     fn new(redis_url: String) -> PyResult<Self> {
         let redist_client = fastqueue_worker::get_redis_client(&redis_url)
-            .map_err(|e| PyRuntimeError::new_err(e))?;
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         Ok(Self {
             redis_client: redist_client,
         })
@@ -34,7 +35,8 @@ impl FastQueueCore {
         args: Py<PyTuple>,
         kwargs: Option<Py<PyDict>>,
     ) -> PyResult<()> {
-        let task_blob = fastqueue_worker::serialize_task(name, max_retries, args, kwargs)?;
+        let task_blob = fastqueue_worker::serialize_task(name, max_retries, args, kwargs)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
         let mut conn = self.redis_client.clone();
         let _: () = redis::cmd("LPUSH")
@@ -52,28 +54,36 @@ impl FastQueueCore {
         Ok(())
     }
 
-    async fn _enqueue_async(
+    fn _enqueue_async<'py>(
         &self,
+        py: Python<'py>,
         name: String,
         queue_name: String,
         max_retries: u8,
         args: Py<PyTuple>,
         kwargs: Option<Py<PyDict>>,
-    ) -> PyResult<()> {
-        let mut conn_manager = ConnectionManager::new(self.redis_client.clone())
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e)))?;
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.redis_client.clone();
 
-        let task_blob = fastqueue_worker::serialize_task(name, max_retries, args, kwargs)?;
+        let task_blob = fastqueue_worker::serialize_task(name, max_retries, args, kwargs)
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to serialize task: {}", e)))?;
 
-        let _: () = redis::cmd("LPUSH")
-            .arg(get_task_key(queue_name))
-            .arg(task_blob)
-            .query_async(&mut conn_manager)
-            .await
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        let fut = async move {
+            let mut conn_manager = ConnectionManager::new(client).await.map_err(|e| {
+                PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e))
+            })?;
 
-        Ok(())
+            let _: () = redis::cmd("LPUSH")
+                .arg(get_task_key(queue_name))
+                .arg(task_blob)
+                .query_async(&mut conn_manager)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+            Ok(())
+        };
+
+        future_into_py(py, fut)
     }
 }
 

@@ -1,11 +1,13 @@
-from tests._core import fastqueue
+from tests._core import fastqueue, async_fastqueue
 
 
-@fastqueue.task(name="name-print", queue="test")
-def print_name(name: str):
+@fastqueue.task(name="name-print")
+def print_name(name: str, *, email: str):
     print(f"Name: {name}")
+    print("Your Email: ", email)
 
 
-@fastqueue.task()
-def send_hello():
-    print("Hello!")
+@async_fastqueue.task()
+async def send_hello(name: str, *, email: str):
+    print("Hello ", name)
+    print("Your Email: ", email)
