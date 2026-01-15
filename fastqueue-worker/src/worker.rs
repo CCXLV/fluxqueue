@@ -221,8 +221,6 @@ async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Resul
         return Ok(());
     };
 
-    info!("Task function: {}", task_function);
-
     let task_args: rmpv::Value = from_slice(&task.args).context(format!(
         "Failed to deserialize task {} function args",
         task.name
@@ -232,14 +230,9 @@ async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Resul
         task.name
     ))?;
 
-    info!("Args {}", task_args);
-    info!("Kwargs {}", task_kwargs);
-
     Python::attach(|py| -> Result<()> {
         let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
-        info!("1: {}", py_args);
         let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
-        info!("2: {}", py_kwargs);
 
         let args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
             list.to_tuple()
@@ -248,13 +241,9 @@ async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Resul
         } else {
             anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
         };
-        info!("3: {}", args_tuple);
         let kwargs_dict = py_kwargs
             .cast_into::<PyDict>()
             .map_err(|_| anyhow::anyhow!("Kwargs must be a map/dict"))?;
-
-        info!("Py Args {}", args_tuple);
-        info!("Py Kwargs {}", kwargs_dict);
 
         let result_object = task_function.call(py, args_tuple, Some(&kwargs_dict))?;
         let bound_result = result_object.bind(py);
