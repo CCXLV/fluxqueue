@@ -20,7 +20,7 @@ impl RedisClient {
         Ok(Self { conn_manager })
     }
 
-    pub async fn register_worker(&self, queue_name: &str, worker_id: &str) -> Result<()> {
+    pub async fn register_worker(&self, queue_name: &str, worker_id: String) -> Result<()> {
         let mut conn = self.conn_manager.clone();
         let script = include_str!("../scripts/lua/register_worker.lua");
 
@@ -81,7 +81,12 @@ impl RedisClient {
     ) -> Result<Option<Vec<u8>>> {
         let raw_data: Option<Vec<u8>> = redis::cmd("BLMOVE")
             .arg(format!("{}:{}", redis_keys::TASK_QUEUE, queue_name))
-            .arg(format!("{}:{}", redis_keys::PROCESSING, worker_id))
+            .arg(format!(
+                "{}:{}:{}",
+                redis_keys::PROCESSING,
+                queue_name,
+                worker_id
+            ))
             .arg("RIGHT")
             .arg("LEFT")
             .arg(1)
@@ -90,6 +95,26 @@ impl RedisClient {
             .context("Failed to mark the task as processing")?;
 
         Ok(raw_data)
+    }
+
+    pub async fn remove_from_processing(
+        &self,
+        conn: &mut ConnectionManager,
+        queue_name: &str,
+        worker_id: &str,
+        task_bytes: &[u8],
+    ) -> Result<()> {
+        let processing_key = format!("{}:{}:{}", redis_keys::PROCESSING, queue_name, worker_id);
+
+        let _: () = redis::cmd("LREM")
+            .arg(&processing_key)
+            .arg(1)
+            .arg(task_bytes)
+            .query_async(conn)
+            .await
+            .context("Failed to remove task from processing")?;
+
+        Ok(())
     }
 }
 
