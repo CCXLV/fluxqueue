@@ -14,7 +14,7 @@ fastapp = FastAPI()
 
 @fastapp.get("/{name}")
 async def _index(name: str):
-    print_name(name, email="test@test.com")
+    await send_hello(name, email="test@test.com")
     return {"message": "Printed name"}, 200
 
 
