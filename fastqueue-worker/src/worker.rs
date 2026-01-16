@@ -10,7 +10,6 @@ use std::time::Duration;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
-use uuid::Uuid;
 
 use crate::redis_client::RedisClient;
 use crate::serialize::deserialize_raw_task_data;
@@ -61,7 +60,6 @@ pub async fn run_worker(
     // TODO: using newly generated uuid on every startup
     // wont let the worker run the tasks in the processing queue
     // if the worker has been shut down before running the functions
-    let instance_id = Uuid::new_v4().to_string();
     let mut workers = JoinSet::new();
 
     for local_id in 0..num_workers {
@@ -69,18 +67,17 @@ pub async fn run_worker(
         let redis_manager = redis_client.conn_manager.clone();
 
         let queue_name = Arc::clone(&queue_name);
-        let worker_id = format!("{}:{}", instance_id, local_id);
         let shutdown = shutdown.clone();
         let task_registry = Arc::clone(&task_registry);
 
         redis_client
-            .register_worker(&queue_name, &worker_id)
+            .register_worker(&queue_name, local_id.to_string())
             .await?;
 
         workers.spawn(worker_loop(
             shutdown,
             queue_name,
-            worker_id,
+            local_id.to_string(),
             redis_client,
             redis_manager,
             task_registry,
@@ -145,7 +142,22 @@ async fn worker_loop(
             => {
                 match res {
                     Ok(Some(raw_data)) => {
-                        run_task(raw_data, &task_registry).await?;
+                        info!("Data in bytes: {:?}", raw_data);
+
+                        let task_result = run_task(raw_data.clone(), &task_registry).await;
+
+                        match task_result {
+                            Ok(_) => {
+                                if let Err(e) = redis_client
+                                    .remove_from_processing(&mut redis_manager, &queue_name, &worker_id, &raw_data)
+                                    .await {
+                                    error!("Failed to ack task: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                error!("Task failed: {}", e);
+                            }
+                        }
                     }
                     Ok(None) => {
                         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -182,7 +194,6 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
     let filename = CString::new("get_functions.py")?;
     let module_name = CString::new("get_functions")?;
 
-    Python::initialize();
     Python::attach(|py| {
         let module = PyModule::from_code(
             py,
@@ -213,7 +224,10 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
     })
 }
 
-async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Result<()> {
+async fn run_task(
+    task_raw_data: Vec<u8>,
+    task_registry: &TaskRegistry,
+) -> Result<()> {
     let task = deserialize_raw_task_data(task_raw_data)?;
 
     let Some(task_function) = task_registry.get(&task.name) else {
@@ -230,33 +244,39 @@ async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Resul
         task.name
     ))?;
 
-    Python::attach(|py| -> Result<()> {
-        let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
-        let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
-
-        let args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
-            list.to_tuple()
-        } else if let Ok(tuple) = py_args.cast::<PyTuple>() {
-            tuple.clone()
-        } else {
-            anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
-        };
-        let kwargs_dict = py_kwargs
-            .cast_into::<PyDict>()
-            .map_err(|_| anyhow::anyhow!("Kwargs must be a map/dict"))?;
-
-        let result_object = task_function.call(py, args_tuple, Some(&kwargs_dict))?;
-        let bound_result = result_object.bind(py);
-
-        let is_awaitable = bound_result
-            .hasattr("__await__")
-            .map_err(|_| anyhow::anyhow!("Failed to get the function attribute"))?;
-        info!("Is awaitable: {}", is_awaitable);
-
-        // TODO: Remove task from redis
-
-        Ok(())
-    })?;
+    tokio::task::spawn_blocking(move || {
+        Python::attach(|py| -> Result<()> {
+            let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
+            let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
+    
+            let args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
+                list.to_tuple()
+            } else if let Ok(tuple) = py_args.cast::<PyTuple>() {
+                tuple.clone()
+            } else {
+                anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
+            };
+            let kwargs_dict = py_kwargs
+                .cast_into::<PyDict>()
+                .map_err(|_| anyhow::anyhow!("Kwargs must be a map/dict"))?;
+    
+            // TODO: This causes infinite loop that somehow moves the task from the
+            // queue to process queue multiple times unless the worker process is stopped
+            info!("BEFORE python call");
+            let result_object = task_function
+                .call(py, args_tuple, Some(&kwargs_dict))
+                .map_err(|_| anyhow::anyhow!("Failed to get the function attribute"))?;
+            // let bound_result = result_object.bind(py);
+    
+            info!("AFTER python call");
+            // let is_awaitable = bound_result
+            //     .hasattr("__await__")
+            //     .map_err(|_| anyhow::anyhow!("Failed to get the function attribute"))?;
+            // info!("Is awaitable: {}", is_awaitable);
+    
+            Ok(())
+        })
+    }).await??;
 
     Ok(())
 }

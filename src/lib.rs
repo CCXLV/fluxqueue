@@ -40,7 +40,7 @@ impl FastQueueCore {
 
         let mut conn = self.redis_client.clone();
         let _: () = redis::cmd("LPUSH")
-            .arg(get_task_key(queue_name))
+            .arg(fastqueue_worker::get_task_key(queue_name))
             .arg(task_blob)
             .query(&mut conn)
             .map_err(|e| {
@@ -74,7 +74,7 @@ impl FastQueueCore {
             })?;
 
             let _: () = redis::cmd("LPUSH")
-                .arg(get_task_key(queue_name))
+                .arg(fastqueue_worker::get_task_key(queue_name))
                 .arg(task_blob)
                 .query_async(&mut conn_manager)
                 .await
@@ -91,12 +91,4 @@ impl FastQueueCore {
 fn fastqueue_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FastQueueCore>()?;
     Ok(())
-}
-
-fn get_task_key(queue_name: String) -> String {
-    format!(
-        "{}:{}",
-        fastqueue_worker::redis_keys::TASK_QUEUE,
-        queue_name
-    )
 }
