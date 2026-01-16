@@ -142,8 +142,6 @@ async fn worker_loop(
             => {
                 match res {
                     Ok(Some(raw_data)) => {
-                        info!("Data in bytes: {:?}", raw_data);
-
                         let task_result = run_task(raw_data.clone(), &task_registry).await;
 
                         match task_result {
@@ -156,6 +154,13 @@ async fn worker_loop(
                             }
                             Err(e) => {
                                 error!("Task failed: {}", e);
+                                // Always remove from processing even on failure to prevent infinite loops
+                                // TODO: Handle failures with Janitor worker
+                                if let Err(remove_err) = redis_client
+                                    .remove_from_processing(&mut redis_manager, &queue_name, &worker_id, &raw_data)
+                                    .await {
+                                    error!("Failed to remove failed task from processing: {}", remove_err);
+                                }
                             }
                         }
                     }
@@ -224,10 +229,7 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
     })
 }
 
-async fn run_task(
-    task_raw_data: Vec<u8>,
-    task_registry: &TaskRegistry,
-) -> Result<()> {
+async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Result<()> {
     let task = deserialize_raw_task_data(task_raw_data)?;
 
     let Some(task_function) = task_registry.get(&task.name) else {
@@ -244,11 +246,11 @@ async fn run_task(
         task.name
     ))?;
 
-    tokio::task::spawn_blocking(move || {
-        Python::attach(|py| -> Result<()> {
+    let handle = tokio::task::spawn_blocking(move || {
+        let result = Python::attach(|py| -> Result<()> {
             let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
             let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
-    
+
             let args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
                 list.to_tuple()
             } else if let Ok(tuple) = py_args.cast::<PyTuple>() {
@@ -259,24 +261,25 @@ async fn run_task(
             let kwargs_dict = py_kwargs
                 .cast_into::<PyDict>()
                 .map_err(|_| anyhow::anyhow!("Kwargs must be a map/dict"))?;
-    
-            // TODO: This causes infinite loop that somehow moves the task from the
-            // queue to process queue multiple times unless the worker process is stopped
-            info!("BEFORE python call");
+
             let result_object = task_function
                 .call(py, args_tuple, Some(&kwargs_dict))
+                .map_err(|e| anyhow::anyhow!("Failed to call Python function: {:?}", e))?;
+
+            let bound_result = result_object.bind(py);
+            let is_awaitable = bound_result
+                .hasattr("__await__")
                 .map_err(|_| anyhow::anyhow!("Failed to get the function attribute"))?;
-            // let bound_result = result_object.bind(py);
-    
-            info!("AFTER python call");
-            // let is_awaitable = bound_result
-            //     .hasattr("__await__")
-            //     .map_err(|_| anyhow::anyhow!("Failed to get the function attribute"))?;
-            // info!("Is awaitable: {}", is_awaitable);
-    
+
+            info!("Is awaitable: {}", is_awaitable);
+
             Ok(())
-        })
-    }).await??;
+        });
+        result
+    });
+
+    let result = handle.await;
+    result??;
 
     Ok(())
 }
