@@ -246,8 +246,8 @@ async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Resul
         task.name
     ))?;
 
-    let handle = tokio::task::spawn_blocking(move || {
-        let result = Python::attach(|py| -> Result<()> {
+    tokio::task::spawn_blocking(move || {
+        Python::attach(|py| -> Result<()> {
             let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
             let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
 
@@ -258,28 +258,35 @@ async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Resul
             } else {
                 anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
             };
+
             let kwargs_dict = py_kwargs
                 .cast_into::<PyDict>()
                 .map_err(|_| anyhow::anyhow!("Kwargs must be a map/dict"))?;
 
-            let result_object = task_function
+            let result = task_function
                 .call(py, args_tuple, Some(&kwargs_dict))
                 .map_err(|e| anyhow::anyhow!("Failed to call Python function: {:?}", e))?;
 
-            let bound_result = result_object.bind(py);
-            let is_awaitable = bound_result
+            let bound_result = result.bind(py);
+            let is_coroutine = bound_result
                 .hasattr("__await__")
-                .map_err(|_| anyhow::anyhow!("Failed to get the function attribute"))?;
+                .map_err(|_| anyhow::anyhow!("Failed to check if result is awaitable"))?;
 
-            info!("Is awaitable: {}", is_awaitable);
+            if is_coroutine {
+                let asyncio = py.import("asyncio")?;
+                let run_func = asyncio.getattr("run")?;
 
+                if !run_func.is_callable() {
+                    anyhow::bail!("asyncio.run() not callable. Python 3.7+ required");
+                }
+
+                run_func.call1((result,))?;
+            }
             Ok(())
-        });
-        result
-    });
-
-    let result = handle.await;
-    result??;
+        })
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("Task execution panicked: {}", e))??;
 
     Ok(())
 }
