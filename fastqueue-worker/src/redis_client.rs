@@ -8,26 +8,22 @@ pub struct RedisClient {
 }
 
 impl RedisClient {
-    pub async fn new(redis_url: &str, config: Option<ConnectionManagerConfig>) -> Result<Self> {
+    pub async fn new(redis_url: &str, config: ConnectionManagerConfig) -> Result<Self> {
         let redis_client = get_redis_client(redis_url)?;
 
-        let conn_manager = match config {
-            Some(config) => ConnectionManager::new_with_config(redis_client, config).await,
-            None => ConnectionManager::new(redis_client).await,
-        }
-        .context("Failed to create Redis connection manager")?;
+        let conn_manager = ConnectionManager::new_with_config(redis_client, config)
+            .await
+            .context("Failed to create Redis connection manager")?;
 
         Ok(Self { conn_manager })
     }
 
     pub async fn register_worker(&self, queue_name: &str, worker_id: String) -> Result<()> {
         let mut conn = self.conn_manager.clone();
-        let script = include_str!("../scripts/lua/register_worker.lua");
+        let key = format!("{}:{}", redis_keys::WORKERS, queue_name);
 
-        let _: () = redis::cmd("EVAL")
-            .arg(script)
-            .arg(1)
-            .arg(format!("{}:{}", redis_keys::WORKERS, queue_name))
+        let _: () = redis::cmd("SADD")
+            .arg(&key)
             .arg(worker_id)
             .query_async(&mut conn)
             .await
@@ -48,17 +44,15 @@ impl RedisClient {
 
     pub async fn cleanup_worker_registry(&self, queue_name: &str) -> Result<usize> {
         let mut conn = self.conn_manager.clone();
-        let script = include_str!("../scripts/lua/cleanup_worker_registry.lua");
+        let key = format!("{}:{}", redis_keys::WORKERS, queue_name);
 
-        let result: usize = redis::cmd("EVAL")
-            .arg(script)
-            .arg(1)
-            .arg(format!("{}:{}", redis_keys::WORKERS, queue_name))
+        let deleted: usize = redis::cmd("DEL")
+            .arg(&key)
             .query_async(&mut conn)
             .await
             .context("Failed to cleanup the worker registry")?;
 
-        Ok(result)
+        Ok(deleted)
     }
 
     pub async fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<()> {
@@ -116,6 +110,8 @@ impl RedisClient {
 
         Ok(())
     }
+
+    pub async fn mark_as_failed() {}
 }
 
 pub fn get_redis_client(redis_url: &str) -> Result<redis::Client> {
