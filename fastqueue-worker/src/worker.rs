@@ -58,9 +58,6 @@ pub async fn run_worker(
     }
 
     let queue_name = Arc::new(queue_name.to_string());
-    // TODO: using newly generated uuid on every startup
-    // wont let the worker run the tasks in the processing queue
-    // if the worker has been shut down before running the functions
     let mut workers = JoinSet::new();
 
     for local_id in 0..num_workers {
