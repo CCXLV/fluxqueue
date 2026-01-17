@@ -9,5 +9,5 @@ def print_name(name: str, *, email: str):
 
 @async_fastqueue.task()
 async def send_hello(name: str, *, email: str):
-    print("Hello ", name)
+    print("Hello from async ", name)
     print("Your Email: ", email)
