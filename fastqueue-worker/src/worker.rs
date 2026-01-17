@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyModule, PyTuple};
-use pyo3::{Bound, Py, PyAny, Python};
+use pyo3::{Bound, Py, PyAny, PyResult, Python};
 use pythonize::pythonize;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use rmp_serde::from_slice;
+use std::cell::RefCell;
 use std::ffi::CString;
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,6 +15,10 @@ use tracing::{error, info, warn};
 use crate::redis_client::RedisClient;
 use crate::serialize::deserialize_raw_task_data;
 use crate::task::TaskRegistry;
+
+thread_local! {
+    static EVENT_LOOP: RefCell<Option<Py<PyAny>>> = RefCell::new(None);
+}
 
 pub async fn run_worker(
     mut shutdown: watch::Receiver<bool>,
@@ -246,8 +251,8 @@ async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Resul
         task.name
     ))?;
 
-    let handle = tokio::task::spawn_blocking(move || {
-        let result = Python::attach(|py| -> Result<()> {
+    let (is_coroutine, py_result) = tokio::task::spawn_blocking(move || {
+        Python::attach(|py| -> Result<(bool, Py<PyAny>)> {
             let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
             let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
 
@@ -262,24 +267,38 @@ async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Resul
                 .cast_into::<PyDict>()
                 .map_err(|_| anyhow::anyhow!("Kwargs must be a map/dict"))?;
 
-            let result_object = task_function
-                .call(py, args_tuple, Some(&kwargs_dict))
-                .map_err(|e| anyhow::anyhow!("Failed to call Python function: {:?}", e))?;
+            let result = task_function.call(py, args_tuple, Some(&kwargs_dict))?;
+            let bound = result.bind(py);
+            let is_coroutine = bound.hasattr("__await__")?;
 
-            let bound_result = result_object.bind(py);
-            let is_awaitable = bound_result
-                .hasattr("__await__")
-                .map_err(|_| anyhow::anyhow!("Failed to get the function attribute"))?;
+            Ok((is_coroutine, result))
+        })
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to run the function: {}", e))??;
 
-            info!("Is awaitable: {}", is_awaitable);
-
-            Ok(())
-        });
-        result
-    });
-
-    let result = handle.await;
-    result??;
+    if is_coroutine {
+        Python::attach(|py| {
+            let event_loop = get_or_create_loop(py)?;
+            event_loop.call_method1(py, "run_until_complete", (py_result,))
+        })?;
+    }
 
     Ok(())
+}
+
+fn get_or_create_loop(py: Python) -> PyResult<Py<PyAny>> {
+    EVENT_LOOP.with(|cell| {
+        let mut loop_opt = cell.borrow_mut();
+        if let Some(loop_ref) = loop_opt.as_ref() {
+            Ok(loop_ref.clone_ref(py))
+        } else {
+            let asyncio = py.import("asyncio")?;
+            let new_loop = asyncio.call_method0("new_event_loop")?;
+            asyncio.call_method1("set_event_loop", (&new_loop,))?;
+            let loop_py = new_loop.unbind();
+            *loop_opt = Some(loop_py.clone_ref(py));
+            Ok(loop_py)
+        }
+    })
 }
