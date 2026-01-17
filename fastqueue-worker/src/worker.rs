@@ -5,6 +5,7 @@ use pythonize::pythonize;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use rmp_serde::from_slice;
 use std::ffi::CString;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
@@ -24,7 +25,7 @@ pub async fn run_worker(
 ) -> Result<()> {
     let redis_config =
         ConnectionManagerConfig::default().set_response_timeout(Some(Duration::from_secs(5)));
-    let redis_client = Arc::new(RedisClient::new(&redis_url, Some(redis_config)).await?);
+    let redis_client = Arc::new(RedisClient::new(&redis_url, redis_config).await?);
 
     let queue_name_is_used = redis_client.check_queue(queue_name).await?;
     if queue_name_is_used {
@@ -199,6 +200,25 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
     let filename = CString::new("get_functions.py")?;
     let module_name = CString::new("get_functions")?;
 
+    let full_current_dir = std::env::current_dir().unwrap();
+    let full_module_path = full_current_dir.join(module_path);
+    let clean_module_path = normalize_path(&full_module_path);
+    let project_root = full_current_dir
+        .ancestors()
+        .find(|p| p.join("tests").exists())
+        .unwrap_or(&full_current_dir);
+    let real_module_path = path_to_module_path(&project_root, &clean_module_path);
+
+    info!("Current dir: {:?}", full_current_dir);
+    info!("Real module path: {:?}", real_module_path);
+
+    if !clean_module_path.exists() || real_module_path.is_none() {
+        error!("Tasks module path {:?} doesn't exist.", clean_module_path);
+        std::process::exit(1);
+    }
+
+    let real_module_path = real_module_path.unwrap();
+
     Python::attach(|py| {
         let module = PyModule::from_code(
             py,
@@ -211,7 +231,7 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
         let py_funcs: Bound<'_, PyDict> = module
             .getattr("list_functions")
             .context("Failed to find 'list_functions'")?
-            .call1((module_path, queue_name))
+            .call1((real_module_path, queue_name))
             .context("Failed to execute 'list_functions'")?
             .cast_into::<PyDict>()
             .map_err(|_| anyhow::anyhow!("Failed to cast result to a Python Dictionary"))?;
@@ -227,6 +247,37 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
 
         Ok(funcs)
     })
+}
+
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = Vec::new();
+    for comp in path.components() {
+        match comp {
+            std::path::Component::ParentDir => {
+                components.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => components.push(other),
+        }
+    }
+    components.iter().collect()
+}
+
+fn path_to_module_path(current_dir: &Path, target_path: &PathBuf) -> Option<String> {
+    let rel_path = target_path.strip_prefix(current_dir).ok()?;
+
+    let mut components: Vec<String> = rel_path
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().to_string())
+        .collect();
+
+    if let Some(last) = components.last_mut() {
+        if let Some(pos) = last.rfind('.') {
+            last.truncate(pos);
+        }
+    }
+
+    Some(components.join("."))
 }
 
 async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Result<()> {

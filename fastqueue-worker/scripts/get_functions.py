@@ -12,8 +12,6 @@ def list_functions(module_path: str, queue: str):
             continue
 
         if inspect.isfunction(obj) or (inspect.isbuiltin(obj) and task_name):
-            # Get the original function from the wrapper
-            # The @wraps decorator stores the original function in __wrapped__
             original_func = getattr(obj, "__wrapped__", obj)
             funcs[task_name] = original_func
     return funcs
