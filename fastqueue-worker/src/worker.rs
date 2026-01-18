@@ -12,7 +12,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
-use crate::redis_client::RedisClient;
+use crate::redis_client::{self, RedisClient};
 use crate::serialize::deserialize_raw_task_data;
 use crate::task::TaskRegistry;
 
@@ -23,8 +23,9 @@ pub async fn run_worker(
     tasks_module_path: String,
     queue_name: &str,
 ) -> Result<()> {
-    let redis_config =
-        ConnectionManagerConfig::default().set_response_timeout(Some(Duration::from_secs(5)));
+    let redis_config = ConnectionManagerConfig::default().set_response_timeout(Some(
+        Duration::from_secs(redis_client::REDIS_CONNECTION_MANAGER_TIMEOUT),
+    ));
     let redis_client = Arc::new(RedisClient::new(&redis_url, redis_config).await?);
 
     let queue_name_is_used = redis_client.check_queue(queue_name).await?;
@@ -152,10 +153,8 @@ async fn worker_loop(
                             }
                             Err(e) => {
                                 error!("Task failed: {}", e);
-                                // Always remove from processing even on failure to prevent infinite loops
-                                // TODO: Handle failures with Janitor worker
                                 if let Err(remove_err) = redis_client
-                                    .remove_from_processing(&mut redis_manager, &queue_name, &worker_id, &raw_data)
+                                    .mark_as_failed(&mut redis_manager, &queue_name, &worker_id, &raw_data)
                                     .await {
                                     error!("Failed to remove failed task from processing: {}", remove_err);
                                 }
@@ -163,7 +162,7 @@ async fn worker_loop(
                         }
                     }
                     Ok(None) => {
-                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        continue;
                     }
                     Err(e) => {
                         error!("Worker {} redis error: {}", worker_id, e);
@@ -278,7 +277,7 @@ fn path_to_module_path(current_dir: &Path, target_path: &PathBuf) -> Option<Stri
 }
 
 async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Result<()> {
-    let task = deserialize_raw_task_data(task_raw_data)?;
+    let task = deserialize_raw_task_data(&task_raw_data)?;
 
     let Some(task_function) = task_registry.get(&task.name) else {
         warn!("Task '{}' not found in registry. Skipping.", task.name);

@@ -1,7 +1,14 @@
 use anyhow::{Context, Result};
+use chrono::Utc;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 
-use crate::config::redis_keys;
+use crate::config::{get_task_key, redis_keys};
+use crate::serialize::deserialize_raw_task_data;
+use crate::serialize_task_data;
+use crate::task::Task;
+
+static REDIS_TIMEOUT: f64 = 10.0;
+pub static REDIS_CONNECTION_MANAGER_TIMEOUT: u64 = 15;
 
 pub struct RedisClient {
     pub(crate) conn_manager: ConnectionManager,
@@ -58,7 +65,7 @@ impl RedisClient {
     pub async fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<()> {
         let mut conn = self.conn_manager.clone();
         let _: () = redis::cmd("LPUSH")
-            .arg(format!("{}:{}", redis_keys::TASK_QUEUE, queue_name))
+            .arg(get_task_key(&queue_name))
             .arg(task_blob)
             .query_async(&mut conn)
             .await
@@ -74,7 +81,7 @@ impl RedisClient {
         worker_id: &str,
     ) -> Result<Option<Vec<u8>>> {
         let raw_data: Option<Vec<u8>> = redis::cmd("BLMOVE")
-            .arg(format!("{}:{}", redis_keys::TASK_QUEUE, queue_name))
+            .arg(get_task_key(queue_name))
             .arg(format!(
                 "{}:{}:{}",
                 redis_keys::PROCESSING,
@@ -83,7 +90,7 @@ impl RedisClient {
             ))
             .arg("RIGHT")
             .arg("LEFT")
-            .arg(1)
+            .arg(REDIS_TIMEOUT)
             .query_async(conn)
             .await
             .context("Failed to mark the task as processing")?;
@@ -111,7 +118,39 @@ impl RedisClient {
         Ok(())
     }
 
-    pub async fn mark_as_failed() {}
+    pub async fn mark_as_failed(
+        &self,
+        conn: &mut ConnectionManager,
+        queue_name: &str,
+        worker_id: &str,
+        task_bytes: &Vec<u8>,
+    ) -> Result<()> {
+        let processing_key = format!("{}:{}:{}", redis_keys::PROCESSING, queue_name, worker_id);
+        let failed_key = format!("{}:{}", redis_keys::FAILED, queue_name);
+
+        let task =
+            deserialize_raw_task_data(&task_bytes).context("Failed to deserialize task data")?;
+
+        let now = Utc::now().timestamp() as u64;
+        let backoff_seconds = (30 * 2u64.pow(task.retries as u32)).min(3600);
+        let retry_at = now + backoff_seconds;
+
+        let mut cloned_task: Task = task.into();
+        cloned_task.retries += 1;
+
+        let new_task_bytes =
+            serialize_task_data(&cloned_task).context("Failed to serialize task")?;
+
+        let _: () = redis::pipe()
+            .atomic()
+            .zadd(&failed_key, &new_task_bytes, retry_at)
+            .lrem(&processing_key, 1, task_bytes)
+            .query_async(conn)
+            .await
+            .context("Failed to mark a task as failed")?;
+
+        Ok(())
+    }
 }
 
 pub fn get_redis_client(redis_url: &str) -> Result<redis::Client> {

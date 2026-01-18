@@ -6,6 +6,6 @@ pub mod redis_keys {
     pub const DEAD: &str = "fastqueue:dead";
 }
 
-pub fn get_task_key(queue_name: String) -> String {
+pub fn get_task_key(queue_name: &str) -> String {
     format!("{}:{}", redis_keys::TASK_QUEUE, queue_name)
 }
