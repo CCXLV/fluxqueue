@@ -205,9 +205,6 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
         .unwrap_or(&full_current_dir);
     let real_module_path = path_to_module_path(&project_root, &clean_module_path);
 
-    info!("Current dir: {:?}", full_current_dir);
-    info!("Real module path: {:?}", real_module_path);
-
     if !clean_module_path.exists() || real_module_path.is_none() {
         error!("Tasks module path {:?} doesn't exist.", clean_module_path);
         std::process::exit(1);
