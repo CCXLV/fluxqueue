@@ -12,7 +12,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
-use crate::redis_client::{self, RedisClient};
+use crate::redis_client::{REDIS_CONN_TIMEOUT, RedisClient};
 use crate::serialize::deserialize_raw_task_data;
 use crate::task::TaskRegistry;
 
@@ -23,9 +23,8 @@ pub async fn run_worker(
     tasks_module_path: String,
     queue_name: &str,
 ) -> Result<()> {
-    let redis_config = ConnectionManagerConfig::default().set_response_timeout(Some(
-        Duration::from_secs(redis_client::REDIS_CONNECTION_MANAGER_TIMEOUT),
-    ));
+    let redis_config =
+        ConnectionManagerConfig::default().set_response_timeout(Some(REDIS_CONN_TIMEOUT));
     let redis_client = Arc::new(RedisClient::new(&redis_url, redis_config).await?);
 
     let queue_name_is_used = redis_client.check_queue(queue_name).await?;
@@ -47,7 +46,6 @@ pub async fn run_worker(
     let task_names: Vec<&String> = task_functions.iter().map(|(name, _obj)| name).collect();
 
     info!("Registering tasks: {:?}", task_names);
-
     info!("{}", "-".repeat(65));
 
     let task_registry = Arc::new(TaskRegistry::new());
@@ -120,6 +118,8 @@ async fn worker_loop(
                 return Ok(())
             }
 
+            // FIX: When one worker marks the task and the task fails, 
+            // other workers are throwing this error Failed to mark the task as processing
             res = redis_client
                 .mark_task_as_processing(&mut redis_manager, &queue_name, &worker_id)
             => {
@@ -160,15 +160,26 @@ async fn worker_loop(
 
 async fn janitor_loop(
     mut shutdown: watch::Receiver<bool>,
-    _queue_name: Arc<String>,
-    _redis_client: Arc<RedisClient>,
-    mut _redis_manager: ConnectionManager,
+    queue_name: Arc<String>,
+    redis_client: Arc<RedisClient>,
+    mut redis_manager: ConnectionManager,
 ) -> Result<()> {
     loop {
         tokio::select! {
             _ = shutdown.changed() => {
                 info!("Janitor shutting down...");
                 return Ok(())
+            }
+
+            // FIX: Failed to get failed task from the queue.
+            res = redis_client.check_failed_tasks(&mut redis_manager, &queue_name) => {
+                match res {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("Janitor error: {}", e);
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                    }
+                }
             }
         }
     }

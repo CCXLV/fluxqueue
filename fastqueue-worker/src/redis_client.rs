@@ -1,14 +1,16 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Ok, Result};
 use chrono::Utc;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
+use std::time::Duration;
 
-use crate::config::{get_task_key, redis_keys};
+use crate::config::redis_keys;
 use crate::serialize::deserialize_raw_task_data;
 use crate::serialize_task_data;
 use crate::task::Task;
 
-static REDIS_TIMEOUT: f64 = 10.0;
-pub static REDIS_CONNECTION_MANAGER_TIMEOUT: u64 = 15;
+pub const REDIS_QUEUE_TIMEOUT: Duration = Duration::from_secs(10);
+pub const REDIS_FAILED_TIMEOUT: Duration = Duration::from_secs(15);
+pub const REDIS_CONN_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub struct RedisClient {
     pub(crate) conn_manager: ConnectionManager,
@@ -27,10 +29,10 @@ impl RedisClient {
 
     pub async fn register_worker(&self, queue_name: &str, worker_id: String) -> Result<()> {
         let mut conn = self.conn_manager.clone();
-        let key = format!("{}:{}", redis_keys::WORKERS, queue_name);
+        let workers_key = redis_keys::get_workers_key(queue_name);
 
         let _: () = redis::cmd("SADD")
-            .arg(&key)
+            .arg(workers_key)
             .arg(worker_id)
             .query_async(&mut conn)
             .await
@@ -41,8 +43,10 @@ impl RedisClient {
 
     pub async fn check_queue(&self, queue_name: &str) -> Result<bool> {
         let mut conn = self.conn_manager.clone();
+        let workers_key = redis_keys::get_workers_key(queue_name);
+
         let queue: bool = redis::cmd("EXISTS")
-            .arg(format!("{}:{}", redis_keys::WORKERS, queue_name))
+            .arg(workers_key)
             .query_async(&mut conn)
             .await
             .context("Failed to check queue name")?;
@@ -51,10 +55,10 @@ impl RedisClient {
 
     pub async fn cleanup_worker_registry(&self, queue_name: &str) -> Result<usize> {
         let mut conn = self.conn_manager.clone();
-        let key = format!("{}:{}", redis_keys::WORKERS, queue_name);
+        let workers_key = redis_keys::get_workers_key(queue_name);
 
         let deleted: usize = redis::cmd("DEL")
-            .arg(&key)
+            .arg(workers_key)
             .query_async(&mut conn)
             .await
             .context("Failed to cleanup the worker registry")?;
@@ -64,8 +68,10 @@ impl RedisClient {
 
     pub async fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<()> {
         let mut conn = self.conn_manager.clone();
+        let queue_key = redis_keys::get_queue_key(&queue_name);
+
         let _: () = redis::cmd("LPUSH")
-            .arg(get_task_key(&queue_name))
+            .arg(queue_key)
             .arg(task_blob)
             .query_async(&mut conn)
             .await
@@ -80,17 +86,15 @@ impl RedisClient {
         queue_name: &str,
         worker_id: &str,
     ) -> Result<Option<Vec<u8>>> {
+        let queue_key = redis_keys::get_queue_key(queue_name);
+        let processing_key = redis_keys::get_processing_key(queue_name, worker_id);
+
         let raw_data: Option<Vec<u8>> = redis::cmd("BLMOVE")
-            .arg(get_task_key(queue_name))
-            .arg(format!(
-                "{}:{}:{}",
-                redis_keys::PROCESSING,
-                queue_name,
-                worker_id
-            ))
+            .arg(queue_key)
+            .arg(processing_key)
             .arg("RIGHT")
             .arg("LEFT")
-            .arg(REDIS_TIMEOUT)
+            .arg(REDIS_QUEUE_TIMEOUT.as_secs())
             .query_async(conn)
             .await
             .context("Failed to mark the task as processing")?;
@@ -105,10 +109,10 @@ impl RedisClient {
         worker_id: &str,
         task_bytes: &[u8],
     ) -> Result<()> {
-        let processing_key = format!("{}:{}:{}", redis_keys::PROCESSING, queue_name, worker_id);
+        let processing_key = redis_keys::get_processing_key(queue_name, worker_id);
 
         let _: () = redis::cmd("LREM")
-            .arg(&processing_key)
+            .arg(processing_key)
             .arg(1)
             .arg(task_bytes)
             .query_async(conn)
@@ -125,8 +129,8 @@ impl RedisClient {
         worker_id: &str,
         task_bytes: &Vec<u8>,
     ) -> Result<()> {
-        let processing_key = format!("{}:{}:{}", redis_keys::PROCESSING, queue_name, worker_id);
-        let failed_key = format!("{}:{}", redis_keys::FAILED, queue_name);
+        let processing_key = redis_keys::get_processing_key(queue_name, worker_id);
+        let failed_key = redis_keys::get_failed_key(queue_name);
 
         let task =
             deserialize_raw_task_data(&task_bytes).context("Failed to deserialize task data")?;
@@ -143,11 +147,33 @@ impl RedisClient {
 
         let _: () = redis::pipe()
             .atomic()
-            .zadd(&failed_key, &new_task_bytes, retry_at)
-            .lrem(&processing_key, 1, task_bytes)
+            .zadd(failed_key, &new_task_bytes, retry_at)
+            .lrem(processing_key, 1, task_bytes)
             .query_async(conn)
             .await
             .context("Failed to mark a task as failed")?;
+
+        Ok(())
+    }
+
+    pub async fn check_failed_tasks(
+        &self,
+        conn: &mut ConnectionManager,
+        queue_name: &str,
+    ) -> Result<()> {
+        let _queue_key = redis_keys::get_queue_key(queue_name);
+        let failed_key = redis_keys::get_failed_key(queue_name);
+
+        let task: Option<Vec<u8>> = redis::pipe()
+            .atomic()
+            .bzmpop_min(REDIS_FAILED_TIMEOUT.as_secs_f64(), failed_key, 0)
+            .query_async(conn)
+            .await
+            .context("Failed to get failed task from the queue.")?;
+
+        if let Some(task) = task {
+            tracing::info!("Task size: {}", task.len());
+        }
 
         Ok(())
     }
