@@ -48,10 +48,7 @@ pub async fn run_worker(
 
     info!("Registering tasks: {:?}", task_names);
 
-    info!(
-        "{}",
-        "-----------------------------------------------------------------------------------------------------"
-    );
+    info!("{}", "-".repeat(65));
 
     let task_registry = Arc::new(TaskRegistry::new());
     for (name, task_obj) in task_functions {
@@ -117,19 +114,6 @@ async fn worker_loop(
     task_registry: Arc<TaskRegistry>,
 ) -> Result<()> {
     loop {
-        // The process
-        // 1. Task comes in -> check if its in task_registry or not
-        //      If its not in task registry just warn the user and continue the loop
-        //      Task functions must be registered before proceeding with its processing
-        // 2. Task is getting marked as processing and getting the function arguments
-        // 3. Using the registered function, and the arguments and running the function
-        //      Will add some more about this when I get there.
-        // 4. If function failed to run, we mark that task as FAILED and put it in Redis Sorted Set
-        // 5. Run second lightweight loop (Janitor) for managing failed tasks
-        //      The loop should wake up in every 1 second and check whether there are any failed tasks or not
-        //      If there are it should check its time when to retry basically it would be like this current_time + (current_retry * 4) minutes
-        //      If its time to retry the task move the task back to the queue list, and just repead the process.
-
         tokio::select! {
             _ = shutdown.changed() => {
                 info!("Worker {} shutting down...", worker_id);
