@@ -11,3 +11,4 @@ def print_name(name: str, *, email: str):
 async def send_hello(name: str, *, email: str):
     print("Hello from async ", name)
     print("Your Email: ", email)
+    raise TypeError("Error")

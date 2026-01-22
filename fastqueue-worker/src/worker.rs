@@ -12,7 +12,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
-use crate::redis_client::RedisClient;
+use crate::redis_client::{self, RedisClient};
 use crate::serialize::deserialize_raw_task_data;
 use crate::task::TaskRegistry;
 
@@ -23,8 +23,9 @@ pub async fn run_worker(
     tasks_module_path: String,
     queue_name: &str,
 ) -> Result<()> {
-    let redis_config =
-        ConnectionManagerConfig::default().set_response_timeout(Some(Duration::from_secs(5)));
+    let redis_config = ConnectionManagerConfig::default().set_response_timeout(Some(
+        Duration::from_secs(redis_client::REDIS_CONNECTION_MANAGER_TIMEOUT),
+    ));
     let redis_client = Arc::new(RedisClient::new(&redis_url, redis_config).await?);
 
     let queue_name_is_used = redis_client.check_queue(queue_name).await?;
@@ -47,10 +48,7 @@ pub async fn run_worker(
 
     info!("Registering tasks: {:?}", task_names);
 
-    info!(
-        "{}",
-        "-----------------------------------------------------------------------------------------------------"
-    );
+    info!("{}", "-".repeat(65));
 
     let task_registry = Arc::new(TaskRegistry::new());
     for (name, task_obj) in task_functions {
@@ -116,19 +114,6 @@ async fn worker_loop(
     task_registry: Arc<TaskRegistry>,
 ) -> Result<()> {
     loop {
-        // The process
-        // 1. Task comes in -> check if its in task_registry or not
-        //      If its not in task registry just warn the user and continue the loop
-        //      Task functions must be registered before proceeding with its processing
-        // 2. Task is getting marked as processing and getting the function arguments
-        // 3. Using the registered function, and the arguments and running the function
-        //      Will add some more about this when I get there.
-        // 4. If function failed to run, we mark that task as FAILED and put it in Redis Sorted Set
-        // 5. Run second lightweight loop (Janitor) for managing failed tasks
-        //      The loop should wake up in every 1 second and check whether there are any failed tasks or not
-        //      If there are it should check its time when to retry basically it would be like this current_time + (current_retry * 4) minutes
-        //      If its time to retry the task move the task back to the queue list, and just repead the process.
-
         tokio::select! {
             _ = shutdown.changed() => {
                 info!("Worker {} shutting down...", worker_id);
@@ -152,10 +137,8 @@ async fn worker_loop(
                             }
                             Err(e) => {
                                 error!("Task failed: {}", e);
-                                // Always remove from processing even on failure to prevent infinite loops
-                                // TODO: Handle failures with Janitor worker
                                 if let Err(remove_err) = redis_client
-                                    .remove_from_processing(&mut redis_manager, &queue_name, &worker_id, &raw_data)
+                                    .mark_as_failed(&mut redis_manager, &queue_name, &worker_id, &raw_data)
                                     .await {
                                     error!("Failed to remove failed task from processing: {}", remove_err);
                                 }
@@ -163,7 +146,7 @@ async fn worker_loop(
                         }
                     }
                     Ok(None) => {
-                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        continue;
                     }
                     Err(e) => {
                         error!("Worker {} redis error: {}", worker_id, e);
@@ -205,9 +188,6 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
         .find(|p| p.join("tests").exists())
         .unwrap_or(&full_current_dir);
     let real_module_path = path_to_module_path(&project_root, &clean_module_path);
-
-    info!("Current dir: {:?}", full_current_dir);
-    info!("Real module path: {:?}", real_module_path);
 
     if !clean_module_path.exists() || real_module_path.is_none() {
         error!("Tasks module path {:?} doesn't exist.", clean_module_path);
@@ -278,7 +258,7 @@ fn path_to_module_path(current_dir: &Path, target_path: &PathBuf) -> Option<Stri
 }
 
 async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Result<()> {
-    let task = deserialize_raw_task_data(task_raw_data)?;
+    let task = deserialize_raw_task_data(&task_raw_data)?;
 
     let Some(task_function) = task_registry.get(&task.name) else {
         warn!("Task '{}' not found in registry. Skipping.", task.name);
