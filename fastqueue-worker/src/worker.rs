@@ -29,6 +29,7 @@ pub async fn run_worker(
 
     let queue_name_is_used = redis_client.check_queue(queue_name).await?;
     if queue_name_is_used {
+        // TODO: Add a way to promp the user for forcing the worker to start.
         error!(
             "Queue name '{}' is already used by another worker, exiting...",
             queue_name
