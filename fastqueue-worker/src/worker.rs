@@ -5,6 +5,7 @@ use pythonize::pythonize;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use rmp_serde::from_slice;
 use std::ffi::CString;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -29,12 +30,20 @@ pub async fn run_worker(
 
     let queue_name_is_used = redis_client.check_queue(queue_name).await?;
     if queue_name_is_used {
-        // TODO: Add a way to promp the user for forcing the worker to start.
-        error!(
-            "Queue name '{}' is already used by another worker, exiting...",
+        if ask_yes_or_no(&format!(
+            "Queue name '{}' is already used by another worker, would you like to start this worker anyway? NOTE: This will clear previous workers data.",
             queue_name
-        );
-        std::process::exit(1);
+        )) {
+            // TODO: Handling it this way seems wrong, I think saving PID in redis is better, and then check whether its still running or not.
+            // Without this figuring out whether there's an actual worker running with this queue name or not is hard if not impossible.
+            std::process::exit(1);
+        } else {
+            error!(
+                "Queue name '{}' is already used by another worker, exiting...",
+                queue_name
+            );
+            std::process::exit(1);
+        }
     }
 
     info!("Queue: {}", queue_name);
@@ -119,7 +128,7 @@ async fn worker_loop(
                 return Ok(())
             }
 
-            // FIX: When one worker marks the task and the task fails, 
+            // FIX: When one worker marks the task and the task fails,
             // other workers are throwing this error Failed to mark the task as processing
             res = redis_client
                 .mark_task_as_processing(&mut redis_manager, &queue_name, &worker_id)
@@ -329,4 +338,20 @@ async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Resul
     .map_err(|e| anyhow::anyhow!("Task execution panicked: {}", e))??;
 
     Ok(())
+}
+
+fn ask_yes_or_no(question: &str) -> bool {
+    loop {
+        print!("{question} [y/n]: ");
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+
+        match input.trim().to_lowercase().as_str() {
+            "y" | "yes" => return true,
+            "n" | "no" => return false,
+            _ => println!("Please enter y or n."),
+        }
+    }
 }
