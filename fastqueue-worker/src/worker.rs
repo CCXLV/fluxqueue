@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyModule, PyTuple};
 use pyo3::{Bound, Py, PyAny, Python};
 use pythonize::pythonize;
@@ -272,7 +272,7 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
             .call1((real_module_path, queue_name))
             .context("Failed to execute 'list_functions'")?
             .cast_into::<PyDict>()
-            .map_err(|_| anyhow::anyhow!("Failed to cast result to a Python Dictionary"))?;
+            .map_err(|_| anyhow!("Failed to cast result to a Python Dictionary"))?;
 
         let funcs: Vec<_> = py_funcs
             .iter()
@@ -343,16 +343,16 @@ async fn run_task(task: &Task, task_function: Arc<Py<PyAny>>) -> Result<()> {
 
             let kwargs_dict = py_kwargs
                 .cast_into::<PyDict>()
-                .map_err(|_| anyhow::anyhow!("Kwargs must be a map/dict"))?;
+                .map_err(|_| anyhow!("Kwargs must be a map/dict"))?;
 
             let result = task_function
                 .call(py, args_tuple, Some(&kwargs_dict))
-                .map_err(|e| anyhow::anyhow!("Failed to call Python function: {:?}", e))?;
+                .map_err(|e| anyhow!("Failed to call Python function: {:?}", e))?;
 
             let bound_result = result.bind(py);
             let is_coroutine = bound_result
                 .hasattr("__await__")
-                .map_err(|_| anyhow::anyhow!("Failed to check if result is awaitable"))?;
+                .map_err(|_| anyhow!("Failed to check if result is awaitable"))?;
 
             if is_coroutine {
                 let asyncio = py.import("asyncio")?;
@@ -368,7 +368,7 @@ async fn run_task(task: &Task, task_function: Arc<Py<PyAny>>) -> Result<()> {
         })
     })
     .await
-    .map_err(|e| anyhow::anyhow!("Task execution panicked: {}", e))??;
+    .map_err(|e| anyhow!("Task execution panicked: {}", e))??;
 
     Ok(())
 }
