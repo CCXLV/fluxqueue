@@ -13,6 +13,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
+use crate::Task;
 use crate::redis_client::{REDIS_CONN_TIMEOUT, RedisClient};
 use crate::serialize::deserialize_raw_task_data;
 use crate::task::TaskRegistry;
@@ -51,7 +52,6 @@ pub async fn run_worker(
     info!("Redis: {}", redis_url);
     info!("Tasks module path: {}", tasks_module_path);
 
-    info!("Finding tasks to register...");
     let task_functions = get_task_functions(tasks_module_path, queue_name)?;
     let task_names: Vec<&String> = task_functions.iter().map(|(name, _obj)| name).collect();
 
@@ -108,6 +108,8 @@ pub async fn run_worker(
         }
     }
 
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
     redis_client.cleanup_worker_registry(&queue_name).await?;
 
     Ok(())
@@ -128,14 +130,19 @@ async fn worker_loop(
                 return Ok(())
             }
 
-            // FIX: When one worker marks the task and the task fails,
-            // other workers are throwing this error Failed to mark the task as processing
             res = redis_client
                 .mark_task_as_processing(&mut redis_manager, &queue_name, &worker_id)
             => {
                 match res {
                     Ok(Some(raw_data)) => {
-                        let task_result = run_task(raw_data.clone(), &task_registry).await;
+                        let task = deserialize_raw_task_data(&raw_data)?;
+
+                        let Some(task_function) = task_registry.get(&task.name) else {
+                            warn!("Task '{}' not found in registry. Skipping.", &task.name);
+                            return Ok(());
+                        };
+
+                        let task_result = run_task(&task, task_function).await;
 
                         match task_result {
                             Ok(_) => {
@@ -146,18 +153,16 @@ async fn worker_loop(
                                 }
                             }
                             Err(e) => {
-                                error!("Task failed: {}", e);
-                                if let Err(remove_err) = redis_client
+                                error!("Task '{}' failed: {}", &task.name, e);
+                                if let Err(err) = redis_client
                                     .mark_as_failed(&mut redis_manager, &queue_name, &worker_id, &raw_data)
                                     .await {
-                                    error!("Failed to remove failed task from processing: {}", remove_err);
+                                    error!("Failed to mark the task '{}' as failed: {}", &task.name, err);
                                 }
                             }
                         }
                     }
-                    Ok(None) => {
-                        continue;
-                    }
+                    Ok(None) => continue,
                     Err(e) => {
                         error!("Worker {} redis error: {}", worker_id, e);
                         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -181,10 +186,27 @@ async fn janitor_loop(
                 return Ok(())
             }
 
-            // FIX: Failed to get failed task from the queue.
             res = redis_client.check_failed_tasks(&mut redis_manager, &queue_name) => {
                 match res {
-                    Ok(_) => {}
+                    Ok(Some(raw_data)) => {
+                        let task = deserialize_raw_task_data(&raw_data)?;
+
+                        info!(
+                            "[JANITOR]: Received a failed task '{}', retries: '{}', max retries: '{}'",
+                            &task.name, &task.retries, &task.max_retries
+                        );
+
+                        if task.retries == task.max_retries {
+                            info!(
+                                "[JANITOR]: Task '{}' has reached it's max retries and will be removed from the queue.",
+                                &task.name
+                            );
+                            return Ok(())
+                        }
+
+                        redis_client.push_task(queue_name.to_string(), raw_data).await?;
+                    }
+                    Ok(None) => continue,
                     Err(e) => {
                         error!("Janitor error: {}", e);
                         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -278,14 +300,7 @@ fn path_to_module_path(current_dir: &Path, target_path: &PathBuf) -> Option<Stri
     Some(components.join("."))
 }
 
-async fn run_task(task_raw_data: Vec<u8>, task_registry: &TaskRegistry) -> Result<()> {
-    let task = deserialize_raw_task_data(&task_raw_data)?;
-
-    let Some(task_function) = task_registry.get(&task.name) else {
-        warn!("Task '{}' not found in registry. Skipping.", task.name);
-        return Ok(());
-    };
-
+async fn run_task(task: &Task, task_function: Arc<Py<PyAny>>) -> Result<()> {
     let task_args: rmpv::Value = from_slice(&task.args).context(format!(
         "Failed to deserialize task {} function args",
         task.name
