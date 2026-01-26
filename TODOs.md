@@ -1,8 +1,8 @@
 ## Todos
 
-- Implement the Janitor worker for re-running the failed tasks. 
+- [x] Implement the Janitor worker for re-running the failed tasks.
 
 
 ## Features to Implement
 
-- Context Aware Dependency Injection
+- [ ] Context Aware Dependency Injection
