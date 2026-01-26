@@ -224,7 +224,9 @@ async fn janitor_loop(
 
                         redis_client.push_task(queue_name.to_string(), raw_data).await?;
                     }
-                    Ok(None) => continue,
+                    Ok(None) => {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                    },
                     Err(e) => {
                         logger.error(format_args!("Error: {}", e));
                         tokio::time::sleep(Duration::from_millis(500)).await;

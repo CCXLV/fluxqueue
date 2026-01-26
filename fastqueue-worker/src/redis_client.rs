@@ -9,7 +9,6 @@ use crate::serialize_task_data;
 use crate::task::Task;
 
 pub const REDIS_QUEUE_TIMEOUT: Duration = Duration::from_secs(1);
-pub const REDIS_FAILED_TIMEOUT: Duration = Duration::from_secs(2);
 pub const REDIS_CONN_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct RedisClient {
@@ -169,7 +168,6 @@ impl RedisClient {
 
         let now = Utc::now().timestamp();
 
-        // FIX: This is a single execution and not useful for a loop
         let raw_data: Option<Vec<u8>> = script.key(&failed_key).arg(now).invoke_async(conn).await?;
 
         Ok(raw_data)
