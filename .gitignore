@@ -1,5 +1,5 @@
 target/
-.tests/
+_tests/
 
 .venv
 

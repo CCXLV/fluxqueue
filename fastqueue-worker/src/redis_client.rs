@@ -99,14 +99,6 @@ impl RedisClient {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to mark task as processing: {}", e))?;
 
-        if let Some(data) = &raw_data {
-            tracing::info!(
-                "Worker {} marked task as processing, data len: {}",
-                worker_id,
-                data.len()
-            );
-        };
-
         Ok(raw_data)
     }
 
@@ -177,6 +169,7 @@ impl RedisClient {
 
         let now = Utc::now().timestamp();
 
+        // FIX: This is a single execution and not useful for a loop
         let raw_data: Option<Vec<u8>> = script.key(&failed_key).arg(now).invoke_async(conn).await?;
 
         Ok(raw_data)

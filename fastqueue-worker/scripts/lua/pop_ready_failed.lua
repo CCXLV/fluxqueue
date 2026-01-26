@@ -4,17 +4,17 @@
 -- ARGV[1] = now timestamp
 
 local items = redis.call(
-  'ZRANGEBYSCORE',
-  KEYS[1],
-  '-inf',
-  ARGV[1],
-  'LIMIT',
-  0,
-  1
+    'ZRANGEBYSCORE',
+    KEYS[1],
+    '-inf',
+    ARGV[1],
+    'LIMIT',
+    0,
+    1
 )
 
 if #items == 0 then
-  return nil
+    return nil
 end
 
 redis.call('ZREM', KEYS[1], items[1])
