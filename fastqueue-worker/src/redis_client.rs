@@ -8,9 +8,9 @@ use crate::serialize::deserialize_raw_task_data;
 use crate::serialize_task_data;
 use crate::task::Task;
 
-pub const REDIS_QUEUE_TIMEOUT: Duration = Duration::from_secs(10);
-pub const REDIS_FAILED_TIMEOUT: Duration = Duration::from_secs(15);
-pub const REDIS_CONN_TIMEOUT: Duration = Duration::from_secs(20);
+pub const REDIS_QUEUE_TIMEOUT: Duration = Duration::from_secs(1);
+pub const REDIS_FAILED_TIMEOUT: Duration = Duration::from_secs(2);
+pub const REDIS_CONN_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct RedisClient {
     pub(crate) conn_manager: ConnectionManager,
@@ -61,7 +61,7 @@ impl RedisClient {
             .arg(workers_key)
             .query_async(&mut conn)
             .await
-            .context("Failed to cleanup the worker registry")?;
+            .map_err(|e| anyhow::anyhow!("Failed to cleanup workers registry: {}", e))?;
 
         Ok(deleted)
     }
@@ -97,7 +97,15 @@ impl RedisClient {
             .arg(REDIS_QUEUE_TIMEOUT.as_secs())
             .query_async(conn)
             .await
-            .context("Failed to mark the task as processing")?;
+            .map_err(|e| anyhow::anyhow!("Failed to mark task as processing: {}", e))?;
+
+        if let Some(data) = &raw_data {
+            tracing::info!(
+                "Worker {} marked task as processing, data len: {}",
+                worker_id,
+                data.len()
+            );
+        };
 
         Ok(raw_data)
     }
@@ -117,7 +125,7 @@ impl RedisClient {
             .arg(task_bytes)
             .query_async(conn)
             .await
-            .context("Failed to remove task from processing")?;
+            .map_err(|e| anyhow::anyhow!("Failed to remove task from processing queue: {}", e))?;
 
         Ok(())
     }
@@ -151,7 +159,7 @@ impl RedisClient {
             .lrem(processing_key, 1, task_bytes)
             .query_async(conn)
             .await
-            .context("Failed to mark a task as failed")?;
+            .map_err(|e| anyhow::anyhow!("Failed to mark task as failed: {}", e))?;
 
         Ok(())
     }
@@ -160,22 +168,18 @@ impl RedisClient {
         &self,
         conn: &mut ConnectionManager,
         queue_name: &str,
-    ) -> Result<()> {
+    ) -> Result<Option<Vec<u8>>> {
         let _queue_key = redis_keys::get_queue_key(queue_name);
         let failed_key = redis_keys::get_failed_key(queue_name);
 
-        let task: Option<Vec<u8>> = redis::pipe()
-            .atomic()
-            .bzmpop_min(REDIS_FAILED_TIMEOUT.as_secs_f64(), failed_key, 0)
-            .query_async(conn)
-            .await
-            .context("Failed to get failed task from the queue.")?;
+        let lua_script = include_str!("../scripts/lua/pop_ready_failed.lua");
+        let script = redis::Script::new(lua_script);
 
-        if let Some(task) = task {
-            tracing::info!("Task size: {}", task.len());
-        }
+        let now = Utc::now().timestamp();
 
-        Ok(())
+        let raw_data: Option<Vec<u8>> = script.key(&failed_key).arg(now).invoke_async(conn).await?;
+
+        Ok(raw_data)
     }
 }
 
