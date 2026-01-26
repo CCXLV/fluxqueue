@@ -1,4 +1,5 @@
 mod config;
+mod logger;
 mod redis_client;
 mod serialize;
 mod task;

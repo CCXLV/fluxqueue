@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyModule, PyTuple};
 use pyo3::{Bound, Py, PyAny, Python};
 use pythonize::pythonize;
@@ -11,9 +11,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::Task;
+use crate::logger::Logger;
 use crate::redis_client::{REDIS_CONN_TIMEOUT, RedisClient};
 use crate::serialize::deserialize_raw_task_data;
 use crate::task::TaskRegistry;
@@ -55,7 +56,7 @@ pub async fn run_worker(
     let task_functions = get_task_functions(tasks_module_path, queue_name)?;
     let task_names: Vec<&String> = task_functions.iter().map(|(name, _obj)| name).collect();
 
-    info!("Registering tasks: {:?}", task_names);
+    info!("Tasks found: {:?}", task_names);
     info!("{}", "-".repeat(65));
 
     let task_registry = Arc::new(TaskRegistry::new());
@@ -123,10 +124,12 @@ async fn worker_loop(
     mut redis_manager: ConnectionManager,
     task_registry: Arc<TaskRegistry>,
 ) -> Result<()> {
+    let logger = Logger::new(format!("WORKER {}", &worker_id));
+
     loop {
         tokio::select! {
             _ = shutdown.changed() => {
-                info!("Worker {} shutting down...", worker_id);
+                logger.info(format_args!("Shutting down..."));
                 return Ok(())
             }
 
@@ -137,8 +140,19 @@ async fn worker_loop(
                     Ok(Some(raw_data)) => {
                         let task = deserialize_raw_task_data(&raw_data)?;
 
+                        logger.info(format_args!(
+                            "Received a task '{}' with a total of {} Bytes",
+                            &task.name,
+                            raw_data.len()
+                        ));
+
                         let Some(task_function) = task_registry.get(&task.name) else {
-                            warn!("Task '{}' not found in registry. Skipping.", &task.name);
+                            logger.warn(format_args!("Task '{}' not found in registry. Skipping", &task.name));
+                            if let Err(e) = redis_client
+                                .remove_from_processing(&mut redis_manager, &queue_name, &worker_id, &raw_data)
+                                .await {
+                                    logger.error(format_args!("Failed to remove the task: {}", e));
+                            }
                             return Ok(());
                         };
 
@@ -149,22 +163,22 @@ async fn worker_loop(
                                 if let Err(e) = redis_client
                                     .remove_from_processing(&mut redis_manager, &queue_name, &worker_id, &raw_data)
                                     .await {
-                                    error!("Failed to ack task: {}", e);
+                                        logger.error(format_args!("Failed to remove the task after successful run: {}", e));
                                 }
                             }
                             Err(e) => {
-                                error!("Task '{}' failed: {}", &task.name, e);
+                                logger.error(format_args!("Task '{}' failed: {}", &task.name, e));
                                 if let Err(err) = redis_client
                                     .mark_as_failed(&mut redis_manager, &queue_name, &worker_id, &raw_data)
                                     .await {
-                                    error!("Failed to mark the task '{}' as failed: {}", &task.name, err);
+                                        logger.error(format_args!("Failed to mark the task '{}' as failed: {}", &task.name, err));
                                 }
                             }
                         }
                     }
                     Ok(None) => continue,
                     Err(e) => {
-                        error!("Worker {} redis error: {}", worker_id, e);
+                        logger.error(format_args!("Worker {} redis error: {}", worker_id, e));
                         tokio::time::sleep(Duration::from_millis(500)).await;
                     }
                 }
@@ -179,10 +193,12 @@ async fn janitor_loop(
     redis_client: Arc<RedisClient>,
     mut redis_manager: ConnectionManager,
 ) -> Result<()> {
+    let logger = Logger::new("JANITOR");
+
     loop {
         tokio::select! {
             _ = shutdown.changed() => {
-                info!("Janitor shutting down...");
+                logger.info(format_args!("Shutting down..."));
                 return Ok(())
             }
 
@@ -191,24 +207,28 @@ async fn janitor_loop(
                     Ok(Some(raw_data)) => {
                         let task = deserialize_raw_task_data(&raw_data)?;
 
-                        info!(
-                            "[JANITOR]: Received a failed task '{}', retries: '{}', max retries: '{}'",
-                            &task.name, &task.retries, &task.max_retries
-                        );
+                        logger.info(format_args!(
+                            "Received a failed task '{}': retries={}, max retries={}",
+                            &task.name,
+                            &task.retries,
+                            &task.max_retries
+                        ));
 
                         if task.retries == task.max_retries {
-                            info!(
-                                "[JANITOR]: Task '{}' has reached it's max retries and will be removed from the queue.",
+                            logger.info(format_args!(
+                                "Task '{}' has reached it's max retries and will be removed from the queue",
                                 &task.name
-                            );
+                            ));
                             return Ok(())
                         }
 
                         redis_client.push_task(queue_name.to_string(), raw_data).await?;
                     }
-                    Ok(None) => continue,
+                    Ok(None) => {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                    },
                     Err(e) => {
-                        error!("Janitor error: {}", e);
+                        logger.error(format_args!("Error: {}", e));
                         tokio::time::sleep(Duration::from_millis(500)).await;
                     }
                 }
@@ -254,7 +274,7 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
             .call1((real_module_path, queue_name))
             .context("Failed to execute 'list_functions'")?
             .cast_into::<PyDict>()
-            .map_err(|_| anyhow::anyhow!("Failed to cast result to a Python Dictionary"))?;
+            .map_err(|_| anyhow!("Failed to cast result to a Python Dictionary"))?;
 
         let funcs: Vec<_> = py_funcs
             .iter()
@@ -325,16 +345,16 @@ async fn run_task(task: &Task, task_function: Arc<Py<PyAny>>) -> Result<()> {
 
             let kwargs_dict = py_kwargs
                 .cast_into::<PyDict>()
-                .map_err(|_| anyhow::anyhow!("Kwargs must be a map/dict"))?;
+                .map_err(|_| anyhow!("Kwargs must be a map/dict"))?;
 
             let result = task_function
                 .call(py, args_tuple, Some(&kwargs_dict))
-                .map_err(|e| anyhow::anyhow!("Failed to call Python function: {:?}", e))?;
+                .map_err(|e| anyhow!("Failed to call Python function: {:?}", e))?;
 
             let bound_result = result.bind(py);
             let is_coroutine = bound_result
                 .hasattr("__await__")
-                .map_err(|_| anyhow::anyhow!("Failed to check if result is awaitable"))?;
+                .map_err(|_| anyhow!("Failed to check if result is awaitable"))?;
 
             if is_coroutine {
                 let asyncio = py.import("asyncio")?;
@@ -350,7 +370,7 @@ async fn run_task(task: &Task, task_function: Arc<Py<PyAny>>) -> Result<()> {
         })
     })
     .await
-    .map_err(|e| anyhow::anyhow!("Task execution panicked: {}", e))??;
+    .map_err(|e| anyhow!("Task execution panicked: {}", e))??;
 
     Ok(())
 }

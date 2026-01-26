@@ -9,7 +9,6 @@ use crate::serialize_task_data;
 use crate::task::Task;
 
 pub const REDIS_QUEUE_TIMEOUT: Duration = Duration::from_secs(1);
-pub const REDIS_FAILED_TIMEOUT: Duration = Duration::from_secs(2);
 pub const REDIS_CONN_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct RedisClient {
@@ -98,14 +97,6 @@ impl RedisClient {
             .query_async(conn)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to mark task as processing: {}", e))?;
-
-        if let Some(data) = &raw_data {
-            tracing::info!(
-                "Worker {} marked task as processing, data len: {}",
-                worker_id,
-                data.len()
-            );
-        };
 
         Ok(raw_data)
     }

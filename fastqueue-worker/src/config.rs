@@ -1,9 +1,9 @@
 pub mod redis_keys {
-    pub const WORKERS: &str = "fastqueue:workers";
-    pub const TASK_QUEUE: &str = "fastqueue:queue";
-    pub const PROCESSING: &str = "fastqueue:processing";
-    pub const FAILED: &str = "fastqueue:failed";
-    pub const DEAD: &str = "fastqueue:dead";
+    static WORKERS: &str = "fastqueue:workers";
+    static TASK_QUEUE: &str = "fastqueue:queue";
+    static PROCESSING: &str = "fastqueue:processing";
+    static FAILED: &str = "fastqueue:failed";
+    static DEAD: &str = "fastqueue:dead";
 
     pub fn get_workers_key(queue_name: &str) -> String {
         format!("{}:{}", WORKERS, queue_name)

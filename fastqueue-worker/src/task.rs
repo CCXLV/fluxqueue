@@ -16,8 +16,6 @@ pub struct Task {
 }
 
 pub struct TaskRegistry {
-    // We use RwLock so many workers can READ at once,
-    // but we can WRITE to it during registration.
     tasks: Arc<RwLock<HashMap<String, Arc<Py<PyAny>>>>>,
 }
 
