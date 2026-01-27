@@ -11,13 +11,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
-use tracing::{error, info};
 
-use crate::Task;
 use crate::logger::Logger;
 use crate::redis_client::{REDIS_CONN_TIMEOUT, RedisClient};
 use crate::serialize::deserialize_raw_task_data;
 use crate::task::TaskRegistry;
+use crate::{Task, logger};
 
 pub async fn run_worker(
     mut shutdown: watch::Receiver<bool>,
@@ -40,7 +39,7 @@ pub async fn run_worker(
             // Without this figuring out whether there's an actual worker running with this queue name or not is hard if not impossible.
             std::process::exit(1);
         } else {
-            error!(
+            tracing::error!(
                 "Queue name '{}' is already used by another worker, exiting...",
                 queue_name
             );
@@ -48,16 +47,16 @@ pub async fn run_worker(
         }
     }
 
-    info!("Queue: {}", queue_name);
-    info!("Workers: {}", num_workers);
-    info!("Redis: {}", redis_url);
-    info!("Tasks module path: {}", tasks_module_path);
-
-    let task_functions = get_task_functions(tasks_module_path, queue_name)?;
+    let task_functions = get_task_functions(&tasks_module_path, queue_name)?;
     let task_names: Vec<&String> = task_functions.iter().map(|(name, _obj)| name).collect();
 
-    info!("Tasks found: {:?}", task_names);
-    info!("{}", "-".repeat(65));
+    logger::initial_logs(
+        queue_name,
+        num_workers,
+        redis_url,
+        &tasks_module_path,
+        &task_names,
+    );
 
     let task_registry = Arc::new(TaskRegistry::new());
     for (name, task_obj) in task_functions {
@@ -105,7 +104,7 @@ pub async fn run_worker(
 
     while let Some(res) = workers.join_next().await {
         if let Err(e) = res {
-            error!("Worker panicked: {}", e);
+            tracing::error!("Worker panicked: {}", e);
         }
     }
 
@@ -237,7 +236,7 @@ async fn janitor_loop(
     }
 }
 
-fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(String, Py<PyAny>)>> {
+fn get_task_functions(module_path: &str, queue_name: &str) -> Result<Vec<(String, Py<PyAny>)>> {
     let script = include_str!("../scripts/get_functions.py");
     let script_cstr = CString::new(script)?;
     let filename = CString::new("get_functions.py")?;
@@ -253,7 +252,7 @@ fn get_task_functions(module_path: String, queue_name: &str) -> Result<Vec<(Stri
     let real_module_path = path_to_module_path(&project_root, &clean_module_path);
 
     if !clean_module_path.exists() || real_module_path.is_none() {
-        error!("Tasks module path {:?} doesn't exist.", clean_module_path);
+        tracing::error!("Tasks module path {:?} doesn't exist.", clean_module_path);
         std::process::exit(1);
     }
 
