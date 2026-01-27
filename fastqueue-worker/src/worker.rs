@@ -5,7 +5,7 @@ use pythonize::pythonize;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use rmp_serde::from_slice;
 use std::ffi::CString;
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -378,10 +378,10 @@ async fn run_task(task: &Task, task_function: Arc<Py<PyAny>>) -> Result<()> {
 fn ask_yes_or_no(question: &str) -> bool {
     loop {
         print!("{question} [y/n]: ");
-        io::stdout().flush().unwrap();
+        std::io::stdout().flush().unwrap();
 
         let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
+        std::io::stdin().read_line(&mut input).unwrap();
 
         match input.trim().to_lowercase().as_str() {
             "y" | "yes" => return true,
