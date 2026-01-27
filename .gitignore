@@ -8,3 +8,6 @@ __pycache__/
 .ruff_cache/
 
 .zed/
+.vscode/
+
+site/
