@@ -12,11 +12,10 @@ use std::time::Duration;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 
-use crate::logger::Logger;
+use crate::logger::{Logger, initial_logs};
 use crate::redis_client::{REDIS_CONN_TIMEOUT, RedisClient};
 use crate::serialize::deserialize_raw_task_data;
-use crate::task::TaskRegistry;
-use crate::{Task, logger};
+use crate::task::{Task, TaskRegistry};
 
 pub async fn run_worker(
     mut shutdown: watch::Receiver<bool>,
@@ -50,7 +49,7 @@ pub async fn run_worker(
     let task_functions = get_task_functions(&tasks_module_path, queue_name)?;
     let task_names: Vec<&String> = task_functions.iter().map(|(name, _obj)| name).collect();
 
-    logger::initial_logs(
+    initial_logs(
         queue_name,
         num_workers,
         redis_url,
