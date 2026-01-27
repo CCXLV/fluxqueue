@@ -217,6 +217,8 @@ async fn janitor_loop(
                                 "Task '{}' has reached it's max retries and will be removed from the queue",
                                 &task.name
                             ));
+                            // TODO: Add a feature to allow users to pass an argument 
+                            // that will let the failed functions save in the DEAD queue for debuging purposes.
                             return Ok(())
                         }
 
