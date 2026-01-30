@@ -7,7 +7,4 @@ fastqueue_core.cpython**
 __pycache__/
 .ruff_cache/
 
-.zed/
-.vscode/
-
 site/
