@@ -67,7 +67,7 @@ jobs:
       - name: Package Linux binary
         run: |
           cd dist
-          mv fastqueue-worker-${{ env.LINUX_TARGET }}.exe fastqueue-worker.exe
+          mv fastqueue-worker-${{ env.WINDOWS_TARGET }}.exe fastqueue-worker.exe
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
