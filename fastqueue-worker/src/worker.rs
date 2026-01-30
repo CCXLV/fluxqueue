@@ -238,11 +238,11 @@ async fn janitor_loop(
             } => {
                 match hearbeat {
                     Ok(()) => {
-                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                     Err(e) => {
                         logger.error(format_args!("Hearbeat Error: {}", e));
-                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                 }
             }
