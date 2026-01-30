@@ -22,7 +22,7 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
 
-      - name: Build Linux
+      - name: Build
         run: scripts/build-worker.sh ${{ env.LINUX_TARGET }}
 
       - name: Upload build artifact
