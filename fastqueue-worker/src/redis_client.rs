@@ -4,10 +4,9 @@ use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::config::redis_keys;
-use crate::serialize::deserialize_raw_task_data;
-use crate::serialize_task_data;
-use crate::task::Task;
+use fastqueue_common::{
+    Task, deserialize_raw_task_data, get_redis_client, keys, serialize_task_data,
+};
 
 pub const REDIS_QUEUE_TIMEOUT: Duration = Duration::from_secs(1);
 pub const REDIS_CONN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -29,7 +28,7 @@ impl RedisClient {
 
     pub async fn register_worker(&self, queue_name: &str, worker_id: &str) -> Result<()> {
         let mut conn = self.conn_manager.clone();
-        let workers_key = redis_keys::get_workers_key(queue_name);
+        let workers_key = keys::get_workers_key(queue_name);
 
         let _: () = redis::cmd("SADD")
             .arg(workers_key)
@@ -47,7 +46,7 @@ impl RedisClient {
         worker_ids: Arc<Vec<Arc<str>>>,
     ) -> Result<()> {
         for worker_id in worker_ids.iter() {
-            let heartbeat_key = redis_keys::get_heartbeat_key(worker_id);
+            let heartbeat_key = keys::get_heartbeat_key(worker_id);
 
             let _: () = redis::cmd("SET")
                 .arg(heartbeat_key)
@@ -68,7 +67,7 @@ impl RedisClient {
         worker_ids: Arc<Vec<Arc<str>>>,
     ) -> Result<()> {
         let mut conn = self.conn_manager.clone();
-        let workers_key = redis_keys::get_workers_key(queue_name);
+        let workers_key = keys::get_workers_key(queue_name);
 
         for worker_id in worker_ids.iter() {
             let _: () = redis::cmd("SREM")
@@ -84,14 +83,8 @@ impl RedisClient {
 
     pub async fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<()> {
         let mut conn = self.conn_manager.clone();
-        let queue_key = redis_keys::get_queue_key(&queue_name);
 
-        let _: () = redis::cmd("LPUSH")
-            .arg(queue_key)
-            .arg(task_blob)
-            .query_async(&mut conn)
-            .await
-            .context("Failed to push task to redis")?;
+        fastqueue_common::push_task_async(&mut conn, queue_name, task_blob).await?;
 
         Ok(())
     }
@@ -102,8 +95,8 @@ impl RedisClient {
         queue_name: &str,
         worker_id: &str,
     ) -> Result<Option<Vec<u8>>> {
-        let queue_key = redis_keys::get_queue_key(queue_name);
-        let processing_key = redis_keys::get_processing_key(queue_name, worker_id);
+        let queue_key = keys::get_queue_key(queue_name);
+        let processing_key = keys::get_processing_key(queue_name, worker_id);
 
         let raw_data: Option<Vec<u8>> = redis::cmd("BLMOVE")
             .arg(queue_key)
@@ -125,7 +118,7 @@ impl RedisClient {
         worker_id: &str,
         task_bytes: &[u8],
     ) -> Result<()> {
-        let processing_key = redis_keys::get_processing_key(queue_name, worker_id);
+        let processing_key = keys::get_processing_key(queue_name, worker_id);
 
         let _: () = redis::cmd("LREM")
             .arg(processing_key)
@@ -145,8 +138,8 @@ impl RedisClient {
         worker_id: &str,
         task_bytes: &Vec<u8>,
     ) -> Result<()> {
-        let processing_key = redis_keys::get_processing_key(queue_name, worker_id);
-        let failed_key = redis_keys::get_failed_key(queue_name);
+        let processing_key = keys::get_processing_key(queue_name, worker_id);
+        let failed_key = keys::get_failed_key(queue_name);
 
         let task =
             deserialize_raw_task_data(&task_bytes).context("Failed to deserialize task data")?;
@@ -177,8 +170,8 @@ impl RedisClient {
         conn: &mut ConnectionManager,
         queue_name: &str,
     ) -> Result<Option<Vec<u8>>> {
-        let _queue_key = redis_keys::get_queue_key(queue_name);
-        let failed_key = redis_keys::get_failed_key(queue_name);
+        let _queue_key = keys::get_queue_key(queue_name);
+        let failed_key = keys::get_failed_key(queue_name);
 
         let lua_script = include_str!("../scripts/lua/pop_ready_failed.lua");
         let script = redis::Script::new(lua_script);
@@ -192,7 +185,7 @@ impl RedisClient {
 
     pub async fn push_dead_task(&self, queue_name: &str, task_blob: Vec<u8>) -> Result<()> {
         let mut conn = self.conn_manager.clone();
-        let queue_key = redis_keys::get_dead_key(&queue_name);
+        let queue_key = keys::get_dead_key(&queue_name);
 
         let _: () = redis::cmd("LPUSH")
             .arg(queue_key)
@@ -203,9 +196,4 @@ impl RedisClient {
 
         Ok(())
     }
-}
-
-pub fn get_redis_client(redis_url: &str) -> Result<redis::Client> {
-    let client = redis::Client::open(redis_url).context("Failed to connect to Redis")?;
-    Ok(client)
 }
