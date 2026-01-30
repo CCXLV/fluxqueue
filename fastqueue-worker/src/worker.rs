@@ -13,8 +13,8 @@ use tokio::task::JoinSet;
 
 use crate::logger::{Logger, initial_logs};
 use crate::redis_client::{REDIS_CONN_TIMEOUT, RedisClient};
-use crate::serialize::deserialize_raw_task_data;
-use crate::task::{Task, TaskRegistry};
+use crate::task::TaskRegistry;
+use fastqueue_common::{Task, deserialize_raw_task_data};
 
 pub async fn run_worker(
     mut shutdown: watch::Receiver<bool>,
