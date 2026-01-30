@@ -30,11 +30,11 @@ jobs:
       - name: Build
         run: scripts/build-worker.sh ${{ env.LINUX_TARGET }}
         
-      - name: Package Linux binary
+      - name: Package binary
         run: |
           cd dist
           mv fastqueue-worker-${{ env.LINUX_TARGET }} fastqueue-worker
-          tar -czvf fastqueue-worker-linux-${{ github.ref_name }}.tar.gz fastqueue-worker
+          tar -czvf fastqueue-${{ github.ref_name }}-linux-x86_64.tar.gz fastqueue-worker
           rm fastqueue-worker
 
       - name: Upload build artifact
@@ -64,10 +64,10 @@ jobs:
         shell: bash
         run: scripts/build-worker.sh ${{ env.WINDOWS_TARGET }}
         
-      - name: Package Linux binary
+      - name: Package binary
         run: |
           cd dist
-          mv fastqueue-worker-${{ env.WINDOWS_TARGET }}.exe fastqueue-worker.exe
+          mv fastqueue-worker-${{ env.WINDOWS_TARGET }}.exe fastqueue-${{ github.ref_name }}-windows-x86_64.exe
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -91,7 +91,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: fastqueue-${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           files: artifacts/**/*
           draft: false
           prerelease: false
