@@ -1,0 +1,53 @@
+name: Worker Release
+
+on:
+  push:
+    tags:
+      - worker-v*
+
+env:
+  LINUX_TARGET: x86_64-unknown-linux-gnu
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Linux
+        run: scripts/build-worker.sh ${{ env.LINUX_TARGET }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fastqueue-worker-linux
+          path: dist/*
+
+  release:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: FastQueue Worker ${{ github.ref_name }}
+          files: artifacts/**/*
+          draft: false
+          prerelease: false
