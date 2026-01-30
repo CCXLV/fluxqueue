@@ -5,11 +5,10 @@ use pythonize::pythonize;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use rmp_serde::from_slice;
 use std::ffi::CString;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::watch;
+use tokio::sync::{Mutex, watch};
 use tokio::task::JoinSet;
 
 use crate::logger::{Logger, initial_logs};
@@ -28,24 +27,6 @@ pub async fn run_worker(
         ConnectionManagerConfig::default().set_response_timeout(Some(REDIS_CONN_TIMEOUT));
     let redis_client = Arc::new(RedisClient::new(&redis_url, redis_config).await?);
 
-    let queue_name_is_used = redis_client.check_queue(queue_name).await?;
-    if queue_name_is_used {
-        if ask_yes_or_no(&format!(
-            "Queue name '{}' is already used by another worker, would you like to start this worker anyway? NOTE: This will clear previous workers data.",
-            queue_name
-        )) {
-            // TODO: Handling it this way seems wrong, I think saving PID in redis is better, and then check whether its still running or not.
-            // Without this figuring out whether there's an actual worker running with this queue name or not is hard if not impossible.
-            std::process::exit(1);
-        } else {
-            tracing::error!(
-                "Queue name '{}' is already used by another worker, exiting...",
-                queue_name
-            );
-            std::process::exit(1);
-        }
-    }
-
     let task_functions = get_task_functions(&tasks_module_path, queue_name)?;
     let task_names: Vec<&String> = task_functions.iter().map(|(name, _obj)| name).collect();
 
@@ -62,25 +43,27 @@ pub async fn run_worker(
         task_registry.insert(name, task_obj)?;
     }
 
-    let queue_name = Arc::new(queue_name.to_string());
+    let queue_name = Arc::from(queue_name.to_string());
+    let worker_ids = generate_worker_ids(num_workers);
     let mut workers = JoinSet::new();
 
-    for local_id in 0..num_workers {
+    for i in 0..num_workers {
         let redis_client = Arc::clone(&redis_client);
         let redis_manager = redis_client.conn_manager.clone();
 
         let queue_name = Arc::clone(&queue_name);
+        let worker_id = Arc::clone(&worker_ids[i]);
         let shutdown = shutdown.clone();
         let task_registry = Arc::clone(&task_registry);
 
         redis_client
-            .register_worker(&queue_name, local_id.to_string())
+            .register_worker(&queue_name, &worker_id)
             .await?;
 
         workers.spawn(worker_loop(
             shutdown,
             queue_name,
-            local_id.to_string(),
+            worker_id,
             redis_client,
             redis_manager,
             task_registry,
@@ -89,12 +72,14 @@ pub async fn run_worker(
 
     let janitor_queue_name = Arc::clone(&queue_name);
     let janitor_redis = Arc::clone(&redis_client);
-    let janitor_manager = janitor_redis.conn_manager.clone();
+    let janitor_worker_ids = Arc::clone(&worker_ids);
+    let janitor_manager = Arc::new(Mutex::new(janitor_redis.conn_manager.clone()));
     let janitor_shutdown = shutdown.clone();
 
     workers.spawn(janitor_loop(
         janitor_shutdown,
         janitor_queue_name,
+        janitor_worker_ids,
         janitor_redis,
         janitor_manager,
     ));
@@ -109,20 +94,24 @@ pub async fn run_worker(
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    redis_client.cleanup_worker_registry(&queue_name).await?;
+    redis_client
+        .cleanup_worker_registry(&queue_name, worker_ids)
+        .await?;
 
     Ok(())
 }
 
 async fn worker_loop(
     mut shutdown: watch::Receiver<bool>,
-    queue_name: Arc<String>,
-    worker_id: String,
+    queue_name: Arc<str>,
+    worker_id: Arc<str>,
     redis_client: Arc<RedisClient>,
     mut redis_manager: ConnectionManager,
     task_registry: Arc<TaskRegistry>,
 ) -> Result<()> {
     let logger = Logger::new(format!("WORKER {}", &worker_id));
+
+    logger.info(format_args!("Started"));
 
     loop {
         tokio::select! {
@@ -176,7 +165,7 @@ async fn worker_loop(
                     }
                     Ok(None) => continue,
                     Err(e) => {
-                        logger.error(format_args!("Worker {} redis error: {}", worker_id, e));
+                        logger.error(format_args!("Worker {} redis error: {}", &worker_id, e));
                         tokio::time::sleep(Duration::from_millis(500)).await;
                     }
                 }
@@ -187,11 +176,14 @@ async fn worker_loop(
 
 async fn janitor_loop(
     mut shutdown: watch::Receiver<bool>,
-    queue_name: Arc<String>,
+    queue_name: Arc<str>,
+    worker_ids: Arc<Vec<Arc<str>>>,
     redis_client: Arc<RedisClient>,
-    mut redis_manager: ConnectionManager,
+    redis_manager: Arc<Mutex<ConnectionManager>>,
 ) -> Result<()> {
     let logger = Logger::new("JANITOR");
+
+    logger.info(format_args!("Started"));
 
     loop {
         tokio::select! {
@@ -200,8 +192,11 @@ async fn janitor_loop(
                 return Ok(())
             }
 
-            res = redis_client.check_failed_tasks(&mut redis_manager, &queue_name) => {
-                match res {
+            tasks_res = async {
+                let mut rm = redis_manager.lock().await;
+                redis_client.check_failed_tasks(&mut rm, &queue_name).await
+            } => {
+                match tasks_res {
                     Ok(Some(raw_data)) => {
                         let task = deserialize_raw_task_data(&raw_data)?;
 
@@ -217,7 +212,7 @@ async fn janitor_loop(
                                 "Task '{}' has reached it's max retries and will be removed from the queue",
                                 &task.name
                             ));
-                            // TODO: Add a feature to allow users to pass an argument 
+                            // TODO: Add a feature to allow users to pass an argument
                             // that will let the failed functions save in the DEAD queue for debuging purposes.
                             return Ok(())
                         }
@@ -229,6 +224,24 @@ async fn janitor_loop(
                     },
                     Err(e) => {
                         logger.error(format_args!("Error: {}", e));
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                    }
+                }
+            }
+
+            hearbeat = async {
+                let worker_ids = Arc::clone(&worker_ids);
+                let mut rm = redis_manager.lock().await;
+                redis_client
+                    .set_worker_heartbeat(&mut rm, worker_ids)
+                    .await
+            } => {
+                match hearbeat {
+                    Ok(()) => {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                    }
+                    Err(e) => {
+                        logger.error(format_args!("Hearbeat Error: {}", e));
                         tokio::time::sleep(Duration::from_millis(500)).await;
                     }
                 }
@@ -375,18 +388,13 @@ async fn run_task(task: &Task, task_function: Arc<Py<PyAny>>) -> Result<()> {
     Ok(())
 }
 
-fn ask_yes_or_no(question: &str) -> bool {
-    loop {
-        print!("{question} [y/n]: ");
-        std::io::stdout().flush().unwrap();
+fn generate_worker_ids(num_workers: usize) -> Arc<Vec<Arc<str>>> {
+    let mut ids = Vec::with_capacity(num_workers);
 
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input).unwrap();
-
-        match input.trim().to_lowercase().as_str() {
-            "y" | "yes" => return true,
-            "n" | "no" => return false,
-            _ => println!("Please enter y or n."),
-        }
+    for _ in 0..num_workers {
+        let id: Arc<str> = Arc::from(uuid::Uuid::new_v4().to_string());
+        ids.push(id);
     }
+
+    Arc::new(ids)
 }

@@ -1,6 +1,7 @@
 use anyhow::{Context, Ok, Result};
 use chrono::Utc;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::config::redis_keys;
@@ -26,7 +27,7 @@ impl RedisClient {
         Ok(Self { conn_manager })
     }
 
-    pub async fn register_worker(&self, queue_name: &str, worker_id: String) -> Result<()> {
+    pub async fn register_worker(&self, queue_name: &str, worker_id: &str) -> Result<()> {
         let mut conn = self.conn_manager.clone();
         let workers_key = redis_keys::get_workers_key(queue_name);
 
@@ -40,29 +41,45 @@ impl RedisClient {
         Ok(())
     }
 
-    pub async fn check_queue(&self, queue_name: &str) -> Result<bool> {
-        let mut conn = self.conn_manager.clone();
-        let workers_key = redis_keys::get_workers_key(queue_name);
+    pub async fn set_worker_heartbeat(
+        &self,
+        conn: &mut ConnectionManager,
+        worker_ids: Arc<Vec<Arc<str>>>,
+    ) -> Result<()> {
+        for worker_id in worker_ids.iter() {
+            let heartbeat_key = redis_keys::get_heartbeat_key(worker_id);
 
-        let queue: bool = redis::cmd("EXISTS")
-            .arg(workers_key)
-            .query_async(&mut conn)
-            .await
-            .context("Failed to check queue name")?;
-        Ok(queue)
+            let _: () = redis::cmd("SET")
+                .arg(heartbeat_key)
+                .arg(1)
+                .arg("EX")
+                .arg(15)
+                .query_async(conn)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to set worker heartbeat: {}", e))?;
+        }
+
+        Ok(())
     }
 
-    pub async fn cleanup_worker_registry(&self, queue_name: &str) -> Result<usize> {
+    pub async fn cleanup_worker_registry(
+        &self,
+        queue_name: &str,
+        worker_ids: Arc<Vec<Arc<str>>>,
+    ) -> Result<()> {
         let mut conn = self.conn_manager.clone();
         let workers_key = redis_keys::get_workers_key(queue_name);
 
-        let deleted: usize = redis::cmd("DEL")
-            .arg(workers_key)
-            .query_async(&mut conn)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to cleanup workers registry: {}", e))?;
+        for worker_id in worker_ids.iter() {
+            let _: () = redis::cmd("SREM")
+                .arg(&workers_key)
+                .arg(worker_id.to_string())
+                .query_async(&mut conn)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to cleanup workers registry: {}", e))?;
+        }
 
-        Ok(deleted)
+        Ok(())
     }
 
     pub async fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<()> {

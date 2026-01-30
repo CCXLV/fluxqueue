@@ -1,5 +1,6 @@
 pub mod redis_keys {
     static WORKERS: &str = "fastqueue:workers";
+    static HEARTBEAT: &str = "fastqueue:heartbeat";
     static TASK_QUEUE: &str = "fastqueue:queue";
     static PROCESSING: &str = "fastqueue:processing";
     static FAILED: &str = "fastqueue:failed";
@@ -7,6 +8,10 @@ pub mod redis_keys {
 
     pub fn get_workers_key(queue_name: &str) -> String {
         format!("{}:{}", WORKERS, queue_name)
+    }
+
+    pub fn get_heartbeat_key(worker_id: &str) -> String {
+        format!("{}:{}", HEARTBEAT, worker_id)
     }
 
     pub fn get_queue_key(queue_name: &str) -> String {
