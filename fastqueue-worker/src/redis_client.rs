@@ -189,6 +189,20 @@ impl RedisClient {
 
         Ok(raw_data)
     }
+
+    pub async fn push_dead_task(&self, queue_name: &str, task_blob: Vec<u8>) -> Result<()> {
+        let mut conn = self.conn_manager.clone();
+        let queue_key = redis_keys::get_dead_key(&queue_name);
+
+        let _: () = redis::cmd("LPUSH")
+            .arg(queue_key)
+            .arg(task_blob)
+            .query_async(&mut conn)
+            .await
+            .context("Failed to push task to redis")?;
+
+        Ok(())
+    }
 }
 
 pub fn get_redis_client(redis_url: &str) -> Result<redis::Client> {
