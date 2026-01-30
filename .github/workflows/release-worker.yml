@@ -33,6 +33,7 @@ jobs:
       - name: Package Linux binary
         run: |
           cd dist
+          mv fastqueue-worker-x86_64-unknown-linux-gnu fastqueue-worker
           tar -czvf fastqueue-worker-linux-${{ github.ref_name }}.tar.gz fastqueue-worker-x86_64-unknown-linux-gnu
           rm fastqueue-worker-x86_64-unknown-linux-gnu
 
