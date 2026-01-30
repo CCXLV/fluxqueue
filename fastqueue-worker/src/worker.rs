@@ -22,6 +22,7 @@ pub async fn run_worker(
     redis_url: &str,
     tasks_module_path: String,
     queue_name: &str,
+    save_dead_tasks: bool,
 ) -> Result<()> {
     let redis_config =
         ConnectionManagerConfig::default().set_response_timeout(Some(REDIS_CONN_TIMEOUT));
@@ -75,11 +76,13 @@ pub async fn run_worker(
     let janitor_worker_ids = Arc::clone(&worker_ids);
     let janitor_manager = Arc::new(Mutex::new(janitor_redis.conn_manager.clone()));
     let janitor_shutdown = shutdown.clone();
+    let save_dead_tasks = Arc::new(save_dead_tasks);
 
     workers.spawn(janitor_loop(
         janitor_shutdown,
         janitor_queue_name,
         janitor_worker_ids,
+        save_dead_tasks,
         janitor_redis,
         janitor_manager,
     ));
@@ -178,6 +181,7 @@ async fn janitor_loop(
     mut shutdown: watch::Receiver<bool>,
     queue_name: Arc<str>,
     worker_ids: Arc<Vec<Arc<str>>>,
+    save_dead_tasks: Arc<bool>,
     redis_client: Arc<RedisClient>,
     redis_manager: Arc<Mutex<ConnectionManager>>,
 ) -> Result<()> {
@@ -212,8 +216,11 @@ async fn janitor_loop(
                                 "Task '{}' has reached it's max retries and will be removed from the queue",
                                 &task.name
                             ));
-                            // TODO: Add a feature to allow users to pass an argument
-                            // that will let the failed functions save in the DEAD queue for debuging purposes.
+
+                            if *save_dead_tasks {
+                                redis_client.push_dead_task(&queue_name, raw_data).await?;
+                            }
+
                             return Ok(())
                         }
 

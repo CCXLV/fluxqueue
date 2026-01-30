@@ -39,6 +39,12 @@ struct Cli {
         help = "Name of the queue if you plan to run multiple worker processes."
     )]
     queue: String,
+
+    #[arg(
+        long,
+        help = "Saves dead tasks in Redis that have used all their retries yet still failed. Can be useful for debugging."
+    )]
+    save_dead_tasks: bool,
 }
 
 #[tokio::main]
@@ -60,8 +66,15 @@ async fn main() -> Result<()> {
     let workers = args.workers;
 
     let worker_handle = tokio::spawn(async move {
-        fastqueue_worker::run_worker(shutdown_rx, workers, &redis_url, tasks_module_path, &queue)
-            .await
+        fastqueue_worker::run_worker(
+            shutdown_rx,
+            workers,
+            &redis_url,
+            tasks_module_path,
+            &queue,
+            args.save_dead_tasks,
+        )
+        .await
     });
 
     tokio::signal::ctrl_c()
