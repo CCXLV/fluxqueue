@@ -1,6 +1,6 @@
 [package]
 name = "fastqueue-worker"
-version = "0.1.2"
+version = "0.1.0"
 edition = "2024"
 
 [lib]
@@ -31,6 +31,5 @@ clap = { version = "4.5.56", features = ["derive", "env"] }
 anyhow = "1.0.100"
 pythonize = "0.27.0"
 chrono = "0.4.43"
-self_update = "0.42.0"
 
 fastqueue-common.workspace = true
