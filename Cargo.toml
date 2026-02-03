@@ -3,7 +3,7 @@ members = ["crates/fastqueue-common", "crates/fastqueue-worker"]
 
 [package]
 name = "fastqueue_core"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 
 [lib]
