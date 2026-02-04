@@ -1,9 +1,9 @@
-static EXECUTORS: &str = "fastqueue:executors";
-static HEARTBEAT: &str = "fastqueue:heartbeat";
-static TASK_QUEUE: &str = "fastqueue:queue";
-static PROCESSING: &str = "fastqueue:processing";
-static FAILED: &str = "fastqueue:failed";
-static DEAD: &str = "fastqueue:dead";
+static EXECUTORS: &str = "fluxqueue:executors";
+static HEARTBEAT: &str = "fluxqueue:heartbeat";
+static TASK_QUEUE: &str = "fluxqueue:queue";
+static PROCESSING: &str = "fluxqueue:processing";
+static FAILED: &str = "fluxqueue:failed";
+static DEAD: &str = "fluxqueue:dead";
 
 pub fn get_executors_key(queue_name: &str) -> String {
     format!("{}:{}", EXECUTORS, queue_name)

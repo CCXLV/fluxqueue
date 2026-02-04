@@ -3,13 +3,11 @@
 #
 #    maturin generate-ci github
 #
-name: Release
+name: Publish to PyPI
 
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -68,7 +66,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+    if: ${{ startsWith(github.event.release.tag_name, 'v') }}
     needs: [linux, sdist]
     permissions:
       # Use to sign the release artifacts

@@ -1,13 +1,13 @@
 [workspace]
-members = ["crates/fastqueue-common", "crates/fastqueue-worker"]
+members = ["crates/fluxqueue-common", "crates/fluxqueue-worker"]
 
 [package]
-name = "fastqueue_core"
+name = "fluxqueue_core"
 version = "0.1.0-rc1"
 edition = "2024"
 
 [lib]
-name = "fastqueue_core"
+name = "fluxqueue_core"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -15,7 +15,7 @@ pyo3 = { version = "0.27.2", features = ["experimental-async"] }
 pyo3-async-runtimes = { version = "0.27.0", features = ["tokio-runtime"] }
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "sync"] }
 redis = "1.0.3"
-fastqueue-common = { path = "./crates/fastqueue-common" }
+fluxqueue-common = { path = "./crates/fluxqueue-common" }
 
 [workspace.dependencies]
-fastqueue-common = { path = "./crates/fastqueue-common" }
+fluxqueue-common = { path = "./crates/fluxqueue-common" }

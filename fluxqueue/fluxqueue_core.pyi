@@ -2,7 +2,7 @@ from typing import Any, TypeVar
 
 T = TypeVar("T")
 
-class FastQueueCore:
+class FluxQueueCore:
     """
     High-performance task queue backed by Rust.
     """

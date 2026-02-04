@@ -9,7 +9,7 @@ if [ -z "$TARGET" ]; then
 fi
 
 
-cargo build -p fastqueue-worker --release --target "$TARGET"
+cargo build -p fluxqueue-worker --release --target "$TARGET"
 
 mkdir -p dist
-cp "target/$TARGET/release/fastqueue-worker" "dist/fastqueue-worker-$TARGET"
+cp "target/$TARGET/release/fluxqueue-worker" "dist/fluxqueue-worker-$TARGET"

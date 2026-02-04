@@ -3,7 +3,7 @@ _tests/
 
 .venv
 
-fastqueue_core.cpython**
+fluxqueue_core.cpython**
 __pycache__/
 .ruff_cache/
 
