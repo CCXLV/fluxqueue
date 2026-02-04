@@ -250,7 +250,7 @@ dependencies = [
 
 [[package]]
 name = "fastqueue-worker"
-version = "0.1.0"
+version = "0.1.0-rc1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -271,7 +271,7 @@ dependencies = [
 
 [[package]]
 name = "fastqueue_core"
-version = "0.1.0"
+version = "0.1.0-rc1"
 dependencies = [
  "fastqueue-common",
  "pyo3",
