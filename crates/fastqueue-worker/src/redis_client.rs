@@ -26,27 +26,27 @@ impl RedisClient {
         Ok(Self { conn_manager })
     }
 
-    pub async fn register_worker(&self, queue_name: &str, worker_id: &str) -> Result<()> {
+    pub async fn register_executor(&self, queue_name: &str, executor_id: &str) -> Result<()> {
         let mut conn = self.conn_manager.clone();
-        let workers_key = keys::get_workers_key(queue_name);
+        let executors_key = keys::get_executors_key(queue_name);
 
         let _: () = redis::cmd("SADD")
-            .arg(workers_key)
-            .arg(worker_id)
+            .arg(executors_key)
+            .arg(executor_id)
             .query_async(&mut conn)
             .await
-            .context("Failed to register the worker")?;
+            .context("Failed to register the executor")?;
 
         Ok(())
     }
 
-    pub async fn set_worker_heartbeat(
+    pub async fn set_executor_heartbeat(
         &self,
         conn: &mut ConnectionManager,
-        worker_ids: Arc<Vec<Arc<str>>>,
+        executor_ids: Arc<Vec<Arc<str>>>,
     ) -> Result<()> {
-        for worker_id in worker_ids.iter() {
-            let heartbeat_key = keys::get_heartbeat_key(worker_id);
+        for id in executor_ids.iter() {
+            let heartbeat_key = keys::get_heartbeat_key(id);
 
             let _: () = redis::cmd("SET")
                 .arg(heartbeat_key)
@@ -55,27 +55,27 @@ impl RedisClient {
                 .arg(15)
                 .query_async(conn)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to set worker heartbeat: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("Failed to set executor heartbeat: {}", e))?;
         }
 
         Ok(())
     }
 
-    pub async fn cleanup_worker_registry(
+    pub async fn cleanup_executors_registry(
         &self,
         queue_name: &str,
-        worker_ids: Arc<Vec<Arc<str>>>,
+        ids: Arc<Vec<Arc<str>>>,
     ) -> Result<()> {
         let mut conn = self.conn_manager.clone();
-        let workers_key = keys::get_workers_key(queue_name);
+        let executors_key = keys::get_executors_key(queue_name);
 
-        for worker_id in worker_ids.iter() {
+        for id in ids.iter() {
             let _: () = redis::cmd("SREM")
-                .arg(&workers_key)
-                .arg(worker_id.to_string())
+                .arg(&executors_key)
+                .arg(id.to_string())
                 .query_async(&mut conn)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to cleanup workers registry: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("Failed to cleanup executors registry: {}", e))?;
         }
 
         Ok(())
@@ -93,10 +93,10 @@ impl RedisClient {
         &self,
         conn: &mut ConnectionManager,
         queue_name: &str,
-        worker_id: &str,
+        executor_id: &str,
     ) -> Result<Option<Vec<u8>>> {
         let queue_key = keys::get_queue_key(queue_name);
-        let processing_key = keys::get_processing_key(queue_name, worker_id);
+        let processing_key = keys::get_processing_key(queue_name, executor_id);
 
         let raw_data: Option<Vec<u8>> = redis::cmd("BLMOVE")
             .arg(queue_key)
@@ -115,10 +115,10 @@ impl RedisClient {
         &self,
         conn: &mut ConnectionManager,
         queue_name: &str,
-        worker_id: &str,
+        executor_id: &str,
         task_bytes: &[u8],
     ) -> Result<()> {
-        let processing_key = keys::get_processing_key(queue_name, worker_id);
+        let processing_key = keys::get_processing_key(queue_name, executor_id);
 
         let _: () = redis::cmd("LREM")
             .arg(processing_key)
@@ -135,10 +135,10 @@ impl RedisClient {
         &self,
         conn: &mut ConnectionManager,
         queue_name: &str,
-        worker_id: &str,
+        executor_id: &str,
         task_bytes: &Vec<u8>,
     ) -> Result<()> {
-        let processing_key = keys::get_processing_key(queue_name, worker_id);
+        let processing_key = keys::get_processing_key(queue_name, executor_id);
         let failed_key = keys::get_failed_key(queue_name);
 
         let task =
