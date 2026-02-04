@@ -1,19 +1,18 @@
+<style>
+.md-content .md-typeset h1 { display: none; }
+</style>
 <p align="center">
-  <img src="../public/logo_full.png" alt="FluxQueue" />
+  <img src="images/logo_full.png" alt="FluxQueue" />
 </p>
-
-# FluxQueue Documentation
 
 Welcome to FluxQueue documentation. FluxQueue is a blazingly fast, lightweight task queue for Python, powered by Rust.
 
-<!--
 ## Quick Links
 
-- [Installation](installation.md) - Get started with FluxQueue
-- [Quick Start](quickstart.md) - Your first task queue
-- [Worker Setup](worker.md) - Deploy and run workers
-- [API Reference](api.md) - Complete API documentation
--->
+- [Installation](tutorial/installation.md) - Get started with FluxQueue
+- [Quick Start](tutorial/quickstart.md) - Your first task queue
+- [Worker Setup](tutorial/worker.md) - Deploy and run workers
+- [API Reference](api/index.md) - Complete API documentation
 
 ## What is FluxQueue?
 
@@ -37,4 +36,4 @@ FluxQueue is a task queue for Python that gets out of your way. The Rust core ma
 
 ## Getting Started
 
-Ready to start using FluxQueue? Head over to the [Installation](installation.md) guide to get set up, then check out the [Quick Start](quickstart.md) guide to create your first task.
+Ready to start using FluxQueue? Head over to the [Installation](tutorial/installation.md) guide to get set up, then check out the [Quick Start](tutorial/quickstart.md) guide to create your first task.

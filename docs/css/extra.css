@@ -1,0 +1,26 @@
+.md-header,
+.md-tabs {
+  background-color: #fac500 !important;
+}
+
+.md-header,
+.md-header a,
+.md-header__button {
+  color: #000 !important;
+}
+
+[data-md-color-scheme="default"] body {
+  background-color: #ffffff;
+  color: #000000;
+}
+
+[data-md-color-scheme="default"] .md-content {
+  color: #000000;
+}
+
+[data-md-color-scheme="default"] .md-nav,
+[data-md-color-scheme="default"] .md-nav__title,
+[data-md-color-scheme="default"] .md-nav__link {
+  color: #000000;
+  background-color: #ffffff;
+}
