@@ -1,14 +1,14 @@
 [package]
-name = "fastqueue-worker"
+name = "fluxqueue-worker"
 version = "0.1.0-rc1"
 edition = "2024"
 
 [lib]
-name = "fastqueue_worker"
+name = "fluxqueue_worker"
 path = "src/lib.rs"
 
 [[bin]]
-name = "fastqueue-worker"
+name = "fluxqueue-worker"
 path = "src/main.rs"
 
 [dependencies]
@@ -32,4 +32,4 @@ anyhow = "1.0.100"
 pythonize = "0.27.0"
 chrono = "0.4.43"
 
-fastqueue-common.workspace = true
+fluxqueue-common.workspace = true

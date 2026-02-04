@@ -3,15 +3,15 @@ use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use pyo3_async_runtimes::tokio::future_into_py;
 use redis::aio::ConnectionManager;
 
-use fastqueue_common::{get_redis_client, push_task, push_task_async, serialize_task};
+use fluxqueue_common::{get_redis_client, push_task, push_task_async, serialize_task};
 
 #[pyclass(subclass)]
-pub struct FastQueueCore {
+pub struct FluxQueueCore {
     pub(crate) redis_client: redis::Client,
 }
 
 #[pymethods]
-impl FastQueueCore {
+impl FluxQueueCore {
     #[new]
     #[pyo3(
         signature = (
@@ -75,7 +75,7 @@ impl FastQueueCore {
 }
 
 #[pymodule]
-fn fastqueue_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<FastQueueCore>()?;
+fn fluxqueue_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<FluxQueueCore>()?;
     Ok(())
 }

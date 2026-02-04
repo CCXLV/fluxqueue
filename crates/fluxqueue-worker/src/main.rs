@@ -9,7 +9,7 @@ struct Cli {
         short,
         long,
         default_value_t = 4,
-        env = "FASTQUEUE_CONCURRENCY",
+        env = "fluxqueue_CONCURRENCY",
         help = "Number of tasks processed in parallel."
     )]
     concurrency: usize,
@@ -18,7 +18,7 @@ struct Cli {
         short,
         long,
         default_value = "redis://127.0.0.1:6379",
-        env = "FASTQUEUE_REDIS_URL",
+        env = "fluxqueue_REDIS_URL",
         help = "Redis URL to connect to."
     )]
     redis_url: String,
@@ -26,7 +26,7 @@ struct Cli {
     #[arg(
         short,
         long,
-        env = "FASTQUEUE_TASKS_MODULE_PATH",
+        env = "fluxqueue_TASKS_MODULE_PATH",
         help = "Module path where the task functions are exported or located."
     )]
     tasks_module_path: String,
@@ -35,7 +35,7 @@ struct Cli {
         short,
         long,
         default_value = "default",
-        env = "FASTQUEUE_QUEUE",
+        env = "fluxqueue_QUEUE",
         help = "Name of the queue."
     )]
     queue: String,
@@ -50,7 +50,7 @@ struct Cli {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter("fastqueue_worker=debug")
+        .with_env_filter("fluxqueue_worker=debug")
         .with_target(false)
         .init();
 
@@ -62,12 +62,12 @@ async fn main() -> Result<()> {
     let queue = cli.queue;
     let save_dead_tasks = cli.save_dead_tasks;
 
-    info!("Starting FastQueue worker. Press Ctrl+C to exit gracefully.");
+    info!("Starting fluxqueue worker. Press Ctrl+C to exit gracefully.");
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     let worker_handle = tokio::spawn(async move {
-        fastqueue_worker::run_worker(
+        fluxqueue_worker::run_worker(
             shutdown_rx,
             concurrency,
             &redis_url,

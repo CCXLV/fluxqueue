@@ -235,7 +235,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "fastqueue-common"
+name = "fastrand"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
+
+[[package]]
+name = "find-msvc-tools"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
+
+[[package]]
+name = "fluxqueue-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -249,13 +261,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "fastqueue-worker"
+name = "fluxqueue-worker"
 version = "0.1.0-rc1"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "fastqueue-common",
+ "fluxqueue-common",
  "pyo3",
  "pyo3-async-runtimes",
  "pythonize",
@@ -270,27 +282,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "fastqueue_core"
+name = "fluxqueue_core"
 version = "0.1.0-rc1"
 dependencies = [
- "fastqueue-common",
+ "fluxqueue-common",
  "pyo3",
  "pyo3-async-runtimes",
  "redis",
  "tokio",
 ]
-
-[[package]]
-name = "fastrand"
-version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
-
-[[package]]
-name = "find-msvc-tools"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "form_urlencoded"

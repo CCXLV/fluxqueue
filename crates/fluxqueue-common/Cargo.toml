@@ -1,10 +1,10 @@
 [package]
-name = "fastqueue-common"
+name = "fluxqueue-common"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "fastqueue_common"
+name = "fluxqueue_common"
 path = "src/lib.rs"
 
 [dependencies]

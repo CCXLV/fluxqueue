@@ -4,7 +4,7 @@ use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use std::sync::Arc;
 use std::time::Duration;
 
-use fastqueue_common::{
+use fluxqueue_common::{
     Task, deserialize_raw_task_data, get_redis_client, keys, serialize_task_data,
 };
 
@@ -84,7 +84,7 @@ impl RedisClient {
     pub async fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<()> {
         let mut conn = self.conn_manager.clone();
 
-        fastqueue_common::push_task_async(&mut conn, queue_name, task_blob).await?;
+        fluxqueue_common::push_task_async(&mut conn, queue_name, task_blob).await?;
 
         Ok(())
     }

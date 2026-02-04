@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "fastqueue"
+name = "fluxqueue"
 dynamic = ["version"]
 description = "A blazingly fast, lightweight task queue for Python, powered by Rust"
 readme = "README.md"
@@ -21,11 +21,11 @@ dev = [
     "ruff", 
     "mkdocs-material"
 ]
-cli = ["fastqueue-cli"]
+cli = ["fluxqueue-cli"]
 
 [tool.maturin]
 python-source = "."
-module-name = "fastqueue.fastqueue_core"
+module-name = "fluxqueue.fluxqueue_core"
 
 [tool.black]
 line-length = 79
