@@ -45,7 +45,7 @@ pub async fn run_worker(
     }
 
     let queue_name = Arc::from(queue_name.to_string());
-    let executor_ids = generate_executors_ids(concurrency);
+    let executor_ids = generate_executor_ids(concurrency);
     let mut executors = JoinSet::new();
 
     for i in 0..concurrency {
@@ -395,10 +395,10 @@ fn path_to_module_path(current_dir: &Path, target_path: &PathBuf) -> Option<Stri
     Some(components.join("."))
 }
 
-fn generate_executors_ids(num_tasks: usize) -> Arc<Vec<Arc<str>>> {
-    let mut ids = Vec::with_capacity(num_tasks);
+fn generate_executor_ids(num_executors: usize) -> Arc<Vec<Arc<str>>> {
+    let mut ids = Vec::with_capacity(num_executors);
 
-    for _ in 0..num_tasks {
+    for _ in 0..num_executors {
         let id: Arc<str> = Arc::from(uuid::Uuid::new_v4().to_string());
         ids.push(id);
     }
