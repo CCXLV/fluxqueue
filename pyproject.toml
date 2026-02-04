@@ -13,11 +13,15 @@ license-files = ["LICENSE"]
 authors = [
     {name = "Giorgi Merebashvili", email = "mereba2627@gmail.com"}
 ]
-dependencies = ["maturin"]
 
 [project.optional-dependencies]
-dev = ["black", "ruff"]
-docs = ["mkdocs-material"]
+dev = [
+    "maturin",
+    "black", 
+    "ruff", 
+    "mkdocs-material"
+]
+cli = ["fastqueue-cli"]
 
 [tool.maturin]
 python-source = "."
