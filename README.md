@@ -4,4 +4,6 @@
 
 **A blazingly fast, lightweight task queue for Python, powered by Rust.**
 
-*Work in progress...*
+## License
+
+FluxQueue is licensed under the Apache-2.0 license, you can view it at [LICENSE](LICENSE).
