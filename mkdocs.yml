@@ -1,3 +1,38 @@
-site_name: fluxqueue
+site_name: FluxQueue
+
 theme:
   name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.indexes
+    - navigation.path
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+repo_name: ccxlv/fluxqueue
+repo_url: https://github.com/ccxlv/fluxqueue
+nav:
+  - FluxQueue: index.md
+  - Tutorial:
+      - tutorial/index.md
+      - tutorial/installation.md
+      - tutorial/quickstart.md
+      - tutorial/worker.md
+extra_css:
+  - css/extra.css
