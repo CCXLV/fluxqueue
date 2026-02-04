@@ -27,7 +27,7 @@ struct Cli {
         short,
         long,
         env = "FASTQUEUE_TASKS_MODULE_PATH",
-        help = "Module path where the task functions are exported or located,."
+        help = "Module path where the task functions are exported or located."
     )]
     tasks_module_path: String,
 
@@ -36,7 +36,7 @@ struct Cli {
         long,
         default_value = "default",
         env = "FASTQUEUE_QUEUE",
-        help = "Name of the queue if you plan to run multiple worker processes."
+        help = "Name of the queue."
     )]
     queue: String,
 
