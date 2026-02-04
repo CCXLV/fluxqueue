@@ -2,8 +2,6 @@ name: Release Worker
 
 on:
   push:
-    branches:
-      - main
     tags:
       - worker-v*
 
