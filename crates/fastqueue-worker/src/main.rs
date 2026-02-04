@@ -9,10 +9,10 @@ struct Cli {
         short,
         long,
         default_value_t = 4,
-        env = "FASTQUEUE_WORKERS",
-        help = "Number of workers to run."
+        env = "FASTQUEUE_CONCURRENCY",
+        help = "Number of tasks processed in parallel."
     )]
-    workers: usize,
+    concurrency: usize,
 
     #[arg(
         short,
@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    let workers = cli.workers;
+    let concurrency = cli.concurrency;
     let redis_url = cli.redis_url;
     let tasks_module_path = cli.tasks_module_path;
     let queue = cli.queue;
@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
     let worker_handle = tokio::spawn(async move {
         fastqueue_worker::run_worker(
             shutdown_rx,
-            workers,
+            concurrency,
             &redis_url,
             tasks_module_path,
             &queue,

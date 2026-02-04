@@ -27,13 +27,13 @@ impl Logger {
 
 pub fn initial_logs(
     queue_name: &str,
-    workers: usize,
+    concurrency: usize,
     redis_url: &str,
     tasks_module_path: &str,
     tasks: &Vec<&String>,
 ) {
     info!("Queue: {}", queue_name);
-    info!("Workers: {}", workers);
+    info!("Concurrency: {}", concurrency);
     info!("Redis: {}", redis_url);
     info!("Tasks module path: {}", tasks_module_path);
     info!("Tasks found: {:?}", tasks);
