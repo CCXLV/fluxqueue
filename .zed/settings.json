@@ -3,11 +3,11 @@
     "JSON": {
       "tab_size": 2,
       "preferred_line_length": 120,
-      "formatter": "prettier",
+      "formatter": "prettier"
     },
     "YAML": {
       "tab_size": 2,
-      "formatter": "prettier",
-    },
+      "formatter": "prettier"
+    }
   }
 }
