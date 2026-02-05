@@ -19,7 +19,9 @@ dev = [
     "maturin",
     "black", 
     "ruff", 
-    "mkdocs-material"
+    "pytest-asyncio",
+    "python-dotenv",
+    "mkdocs-material",
 ]
 cli = ["fluxqueue-cli"]
 
