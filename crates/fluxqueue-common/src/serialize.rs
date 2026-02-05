@@ -64,3 +64,55 @@ pub fn serialize_task_data(task: &Task) -> Result<Vec<u8>> {
     let blob = to_vec(task).context("Failed to serialize task data")?;
     Ok(blob)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_serialize_task() -> Result<()> {
+        let task = Task {
+            id: "ID".to_string(),
+            name: "test-task".to_string(),
+            args: vec![],
+            kwargs: vec![],
+            created_at: 10,
+            retries: 0,
+            max_retries: 3,
+        };
+
+        let task_blob = serialize_task_data(&task)?;
+
+        assert_eq!(task_blob.len(), 19);
+        assert_eq!(task_blob[0], 151);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_task() -> Result<()> {
+        let task = Task {
+            id: "ID".to_string(),
+            name: "test-task".to_string(),
+            args: vec![],
+            kwargs: vec![],
+            created_at: 10,
+            retries: 0,
+            max_retries: 3,
+        };
+
+        let task_blob = serialize_task_data(&task)?;
+
+        let deserialized_task = deserialize_raw_task_data(&task_blob)?;
+
+        assert_eq!(task.id, deserialized_task.id);
+        assert_eq!(task.name, deserialized_task.name);
+        assert_eq!(task.args, deserialized_task.args);
+        assert_eq!(task.kwargs, deserialized_task.kwargs);
+        assert_eq!(task.created_at, deserialized_task.created_at);
+        assert_eq!(task.retries, deserialized_task.retries);
+        assert_eq!(task.max_retries, deserialized_task.max_retries);
+
+        Ok(())
+    }
+}
