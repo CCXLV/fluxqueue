@@ -1,3 +1,3 @@
-__all__ = ["AsyncFluxQueue", "FluxQueue"]
+__all__ = ["FluxQueue"]
 
-from .core import AsyncFluxQueue, FluxQueue
+from .core import FluxQueue

@@ -1,79 +1,62 @@
 import inspect
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, ParamSpec, TypeVar, cast
+from typing import Any, ParamSpec, TypeAlias, cast
 
 from .fluxqueue_core import FluxQueueCore
 from .utils import get_task_name
 
 P = ParamSpec("P")
-R = TypeVar("R")
+TaskDecorator: TypeAlias = Callable[[Callable[P, Any]], Callable[P, Any]]
 
 
 class FluxQueue:
+    """
+    High-performance task queue backed by Rust.
+    """
+
     def __init__(self, redis_url: str | None = "redis://127.0.0.1:6379"):
         self._core = FluxQueueCore(redis_url=redis_url)
 
     def task(
-        self, *, name: str | None = None, queue: str = "default", max_retries: int = 3
-    ) -> Callable[[Callable[P, R]], Callable[P, None]]:
+        self,
+        *,
+        name: str | None = None,
+        queue: str = "default",
+        max_retries: int = 3,
+    ) -> TaskDecorator[P]:
         """
         Decorator for wrapping a function to be enqueued in the fluxqueue.
         """
 
-        def decorator(func: Callable[P, R]) -> Callable[P, None]:
+        def decorator(func: Callable[P, Any]) -> Callable[P, Any]:
+            is_async = inspect.iscoroutinefunction(func)
             task_name = get_task_name(func, name)
+
             cast(Any, func).task_name = task_name
             cast(Any, func).queue = queue
 
-            if inspect.iscoroutinefunction(func):
-                raise TypeError(
-                    "fluxqueue.task can only decorate sync functions, use Asyncfluxqueue instead"
-                )
+            if is_async:
 
-            @wraps(func)
-            def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
-                self._core._enqueue(task_name, queue, max_retries, args, kwargs)
-                return None
+                @wraps(func)
+                async def async_wrapper(
+                    *args: P.args, **kwargs: P.kwargs
+                ) -> None:
+                    await self._core._enqueue_async(
+                        task_name, queue, max_retries, args, kwargs
+                    )
+                    return None
 
-            return sync_wrapper
+                return async_wrapper
+            else:
 
-        return decorator
+                @wraps(func)
+                def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
+                    self._core._enqueue(
+                        task_name, queue, max_retries, args, kwargs
+                    )
+                    return None
 
-
-class AsyncFluxQueue:
-    def __init__(self, redis_url: str | None = "redis://127.0.0.1:6379"):
-        self._core = FluxQueueCore(redis_url=redis_url)
-
-    def task(
-        self, *, name: str | None = None, queue: str = "default", max_retries: int = 3
-    ) -> Callable[
-        [Callable[P, Coroutine[Any, Any, R]]],
-        Callable[P, Coroutine[Any, Any, None]],
-    ]:
-        """
-        Decorator for wrapping a function to be enqueued in the fluxqueue.
-        """
-
-        def decorator(
-            func: Callable[P, Coroutine[Any, Any, R]],
-        ) -> Callable[P, Coroutine[Any, Any, None]]:
-            task_name = get_task_name(func, name)
-            cast(Any, func).task_name = task_name
-            cast(Any, func).queue = queue
-
-            if not inspect.iscoroutinefunction(func):
-                raise TypeError(
-                    "Asyncfluxqueue.task can only decorate async (coroutine) functions"
-                )
-
-            @wraps(func)
-            async def wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
-                await self._core._enqueue_async(
-                    task_name, queue, max_retries, args, kwargs
-                )
-                return None
-
-            return wrapper
+                return sync_wrapper
 
         return decorator
