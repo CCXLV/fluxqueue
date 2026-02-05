@@ -11,6 +11,7 @@ Welcome to FluxQueue documentation. FluxQueue is a blazingly fast, lightweight t
 
 - [Installation](tutorial/installation.md) - Get started with FluxQueue
 - [Quick Start](tutorial/quickstart.md) - Your first task queue
+- [Defining and Exposing Tasks](tutorial/defininig_and_exposing_tasks.md) - Organize and expose tasks for the worker
 - [Worker Setup](tutorial/worker.md) - Deploy and run workers
 - [API Reference](api/index.md) - Complete API documentation
 

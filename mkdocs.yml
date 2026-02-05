@@ -13,26 +13,49 @@ theme:
 
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: black
-      accent: teal
+      primary: amber
+      accent: amber
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
+  highlightjs: true
+  hljs_languages:
+    - python
+    - bash
+    - yaml
+    - json
   features:
+    - content.code.copy
     - navigation.indexes
     - navigation.path
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.top
     - navigation.tracking
+    - navigation.footer
+  logo: images/logo_white.svg
+  favicon: images/logo.svg
+  language: en
+
 repo_name: ccxlv/fluxqueue
 repo_url: https://github.com/ccxlv/fluxqueue
+
 nav:
   - FluxQueue: index.md
   - Tutorial:
       - tutorial/index.md
       - tutorial/installation.md
       - tutorial/quickstart.md
+      - tutorial/defininig_and_exposing_tasks.md
       - tutorial/worker.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.details
+  - admonition
+
 extra_css:
   - css/extra.css
