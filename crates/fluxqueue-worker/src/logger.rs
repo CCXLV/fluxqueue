@@ -35,7 +35,7 @@ pub fn initial_logs(
     info!("Queue: {}", queue_name);
     info!("Concurrency: {}", concurrency);
     info!("Redis: {}", redis_url);
-    info!("Tasks module path: {}", tasks_module_path);
+    info!("Tasks module: {}", tasks_module_path);
     info!("Tasks found: {:?}", tasks);
     info!("{}", "-".repeat(65));
 }

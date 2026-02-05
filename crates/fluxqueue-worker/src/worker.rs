@@ -26,9 +26,16 @@ pub async fn run_worker(
 ) -> Result<()> {
     let redis_config =
         ConnectionManagerConfig::default().set_response_timeout(Some(REDIS_CONN_TIMEOUT));
-    let redis_client = Arc::new(RedisClient::new(&redis_url, redis_config).await?);
+    let redis_client = RedisClient::new(&redis_url, redis_config).await.map_err(|e| {
+        tracing::error!("{}", e);
+        std::process::exit(1);
+    })?;
+    let redis_client = Arc::new(redis_client);
 
-    let task_functions = get_task_functions(&tasks_module_path, queue_name)?;
+    let task_functions = get_task_functions(&tasks_module_path, queue_name).map_err(|e| {
+        tracing::error!("{}", e);
+        std::process::exit(1);
+    })?;
     let task_names: Vec<&String> = task_functions.iter().map(|(name, _obj)| name).collect();
 
     initial_logs(
@@ -114,7 +121,7 @@ async fn executor_loop(
 ) -> Result<()> {
     let logger = Logger::new(format!("EXECUTOR {}", &executor_id));
 
-    logger.info(format_args!("Started"));
+    logger.info(format_args!("Started!"));
 
     loop {
         tokio::select! {
@@ -187,7 +194,7 @@ async fn janitor_loop(
 ) -> Result<()> {
     let logger = Logger::new("JANITOR");
 
-    logger.info(format_args!("Started"));
+    logger.info(format_args!("Started!"));
 
     loop {
         tokio::select! {
@@ -345,9 +352,9 @@ fn get_task_functions(module_path: &str, queue_name: &str) -> Result<Vec<(String
 
         let py_funcs: Bound<'_, PyDict> = module
             .getattr("list_functions")
-            .context("Failed to find 'list_functions'")?
+            .map_err(|e| anyhow!("Failed to get 'list_functions': {}", e))?
             .call1((real_module_path, queue_name))
-            .context("Failed to execute 'list_functions'")?
+            .map_err(|e| anyhow!("Failed to execute 'list_functions' to get tasks: {}", e))?
             .cast_into::<PyDict>()
             .map_err(|_| anyhow!("Failed to cast result to a Python Dictionary"))?;
 
