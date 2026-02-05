@@ -2,11 +2,9 @@ target/
 _tests/
 
 .venv
-.env
 
 fluxqueue_core.cpython**
 __pycache__/
 .ruff_cache/
-.pytest_cache/
 
 site/
