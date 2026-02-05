@@ -16,14 +16,22 @@ authors = [
 
 [project.optional-dependencies]
 dev = [
-    "maturin",
-    "black", 
-    "ruff", 
+    "black",
+    "ruff",
     "pytest-asyncio",
     "python-dotenv",
+    "redis",
     "mkdocs-material",
+    "maturin",
+]
+tests = [
+    "pytest-asyncio",
+    "python-dotenv",
+    "redis"
 ]
 cli = ["fluxqueue-cli"]
+docs = ["mkdocs-material"]
+build = ["maturin"]
 
 [tool.maturin]
 python-source = "."
