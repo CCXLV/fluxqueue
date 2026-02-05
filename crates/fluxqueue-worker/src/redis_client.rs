@@ -21,7 +21,7 @@ impl RedisClient {
 
         let conn_manager = ConnectionManager::new_with_config(redis_client, config)
             .await
-            .context("Failed to create Redis connection manager")?;
+            .map_err(|e| anyhow::anyhow!("Failed to connect to Redis: {}", e))?;
 
         Ok(Self { conn_manager })
     }
