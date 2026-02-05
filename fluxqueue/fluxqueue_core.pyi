@@ -19,7 +19,7 @@ class FluxQueueCore:
         queue_name: str,
         max_retries: int,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """
         Enqueue a function for background execution.
@@ -32,7 +32,7 @@ class FluxQueueCore:
         queue_name: str,
         max_retries: int,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """
         Enqueue a function for background execution.
