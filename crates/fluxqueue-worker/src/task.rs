@@ -26,10 +26,4 @@ impl TaskRegistry {
         let tasks = self.tasks.read().ok()?;
         tasks.get(name).cloned()
     }
-
-    pub fn remove(&self, name: &str) {
-        if let Ok(mut tasks) = self.tasks.write() {
-            tasks.remove(name);
-        }
-    }
 }
