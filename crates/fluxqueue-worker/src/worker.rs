@@ -26,10 +26,12 @@ pub async fn run_worker(
 ) -> Result<()> {
     let redis_config =
         ConnectionManagerConfig::default().set_response_timeout(Some(REDIS_CONN_TIMEOUT));
-    let redis_client = RedisClient::new(&redis_url, redis_config).await.map_err(|e| {
-        tracing::error!("{}", e);
-        std::process::exit(1);
-    })?;
+    let redis_client = RedisClient::new(&redis_url, redis_config)
+        .await
+        .map_err(|e| {
+            tracing::error!("{}", e);
+            std::process::exit(1);
+        })?;
     let redis_client = Arc::new(redis_client);
 
     let task_functions = get_task_functions(&tasks_module_path, queue_name).map_err(|e| {
