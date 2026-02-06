@@ -12,7 +12,13 @@ TaskDecorator: TypeAlias = Callable[[Callable[P, Any]], Callable[P, Any]]
 
 class FluxQueue:
     """
-    High-performance task queue backed by Rust.
+    High-level client for enqueueing Python callables as background tasks.
+
+    It uses the Rust-backed core to push tasks into Redis and is intended to be
+    the main entry point used from your application code.
+
+    In most cases you create a single instance per application or service and
+    reuse it. The `redis_url` parameter controls which Redis instance is used.
     """
 
     def __init__(self, redis_url: str | None = "redis://127.0.0.1:6379"):
@@ -26,7 +32,24 @@ class FluxQueue:
         max_retries: int = 3,
     ) -> TaskDecorator[P]:
         """
-        Decorator for wrapping a function to be enqueued in the fluxqueue.
+        Mark a function as a FluxQueue task.
+
+        This returns a decorator. When you apply it to a function, calling that
+        function will enqueue a task in Redis instead of running the function
+        immediately. The actual work is done later by the worker.
+
+        Parameters
+        ----------
+        `name`:
+            Optional explicit task name. If not set, a name is derived from the
+            function name.
+
+        `queue`:
+            Name of the queue to push tasks to. Defaults to `"default"`.
+
+        `max_retries`:
+            Maximum number of retries the worker will attempt for this task
+            before treating it as dead.
         """
 
         def decorator(func: Callable[P, Any]) -> Callable[P, Any]:

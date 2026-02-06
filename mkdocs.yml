@@ -40,6 +40,23 @@ theme:
 repo_name: ccxlv/fluxqueue
 repo_url: https://github.com/ccxlv/fluxqueue
 
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_root_heading: true
+            show_if_no_docstring: true
+            members_order: source
+            merge_init_into_class: true
+            inherited_members: true
+            separate_signature: true
+            filters:
+              - "!^_"
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+
 nav:
   - FluxQueue: index.md
   - Learn:
@@ -50,6 +67,8 @@ nav:
       - tutorial/worker.md
   - API Reference:
       - api/index.md
+      - api/fluxqueue.md
+      - api/environment.md
 
 markdown_extensions:
   - pymdownx.highlight:
