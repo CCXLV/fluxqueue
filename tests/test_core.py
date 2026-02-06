@@ -1,4 +1,5 @@
 import pytest
+
 from fluxqueue import FluxQueue
 
 from .main import fluxqueue
@@ -20,4 +21,4 @@ def test_correct_connection():
     def task():
         print("Correct Task")
 
-    assert task() == None
+    assert task() is None

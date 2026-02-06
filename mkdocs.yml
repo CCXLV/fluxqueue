@@ -42,7 +42,7 @@ repo_url: https://github.com/ccxlv/fluxqueue
 
 nav:
   - FluxQueue: index.md
-  - Tutorial:
+  - Learn:
       - tutorial/index.md
       - tutorial/installation.md
       - tutorial/quickstart.md

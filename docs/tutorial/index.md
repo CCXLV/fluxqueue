@@ -1,4 +1,4 @@
-# Tutorials
+# Learn
 
 Get started with FluxQueue by following these tutorials. They'll walk you through installation, creating your first tasks, and running workers.
 

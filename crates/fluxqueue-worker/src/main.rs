@@ -9,7 +9,7 @@ struct Cli {
         short,
         long,
         default_value_t = 4,
-        env = "fluxqueue_CONCURRENCY",
+        env = "FLUXQUEUE_CONCURRENCY",
         help = "Number of tasks processed in parallel."
     )]
     concurrency: usize,
@@ -18,7 +18,7 @@ struct Cli {
         short,
         long,
         default_value = "redis://127.0.0.1:6379",
-        env = "fluxqueue_REDIS_URL",
+        env = "FLUXQUEUE_REDIS_URL",
         help = "Redis URL to connect to."
     )]
     redis_url: String,
@@ -26,7 +26,7 @@ struct Cli {
     #[arg(
         short,
         long,
-        env = "fluxqueue_TASKS_MODULE_PATH",
+        env = "FLUXQUEUE_TASKS_MODULE_PATH",
         help = "Module path where the task functions are exported or located."
     )]
     tasks_module_path: String,
@@ -35,7 +35,7 @@ struct Cli {
         short,
         long,
         default_value = "default",
-        env = "fluxqueue_QUEUE",
+        env = "FLUXQUEUE_QUEUE",
         help = "Name of the queue."
     )]
     queue: String,
