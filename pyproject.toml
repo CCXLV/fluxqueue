@@ -62,4 +62,4 @@ ignore = [
   "C901", # complexity
   "N806", # variable in function should be lowercase (allows CamelCase for pydantic models)
 ]
-exclude = [".git", ".ruff_cache", ".venv", "tests/**"]
+exclude = [".git", ".ruff_cache", ".venv"]

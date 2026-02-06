@@ -12,7 +12,7 @@ def test_sync_task():
     redis_result = redis_client.lrange("fluxqueue:queue:default", 0, -1)
     redis_string = redis_result[0].decode("utf-8", errors="ignore")  # type: ignore
 
-    assert result == None
+    assert result is None
     assert "George" in redis_string
 
     redis_client.flushdb()
@@ -28,7 +28,7 @@ async def test_async_task():
     redis_result = redis_client.lrange("fluxqueue:queue:default", 0, -1)
     redis_string = redis_result[0].decode("utf-8", errors="ignore")  # type: ignore
 
-    assert result == None
+    assert result is None
     assert "Async George" in redis_string
 
     redis_client.flushdb()
