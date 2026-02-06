@@ -23,9 +23,9 @@ The worker is a standalone Rust-powered process (invoked through the `fluxqueue`
 - Pulls tasks from Redis and executes the corresponding Python functions
 - Handles retries and optionally preserves dead tasks for debugging
 
+<!-- prettier-ignore -->
 !!! tip
-In development, you will usually run the worker through the dedicated Python CLI (`fluxqueue-cli`), which exposes a Python-friendly interface:
-
+    In development, you will usually run the worker through the dedicated Python CLI (`fluxqueue-cli`), which exposes a Python-friendly interface:
     ```bash
     fluxqueue start --tasks-module-path myapp.tasks --queue default
     ```
@@ -213,18 +213,21 @@ This separation lets you:
 For each worker process:
 
 - **Executors**:
-  - One per `--concurrency` slot.
-  - Each has a unique executor ID.
-  - Registers itself in Redis and pulls tasks.
+- <!-- prettier-ignore -->
+    - One per `--concurrency` slot.
+    - Each has a unique executor ID.
+    - Registers itself in Redis and pulls tasks.
 
 - **Heartbeat**:
-  - Janitor periodically updates an “executor heartbeat” in Redis for all executor IDs.
-  - This makes it possible (now or in the future) to detect stale or dead executors.
+- <!-- prettier-ignore -->
+    - Janitor periodically updates an “executor heartbeat” in Redis for all executor IDs.
+    - This makes it possible (now or in the future) to detect stale or dead executors.
 
 - **Janitor loop**:
-  - Checks failed tasks and handles retries / dead tasks.
-  - Maintains executor heartbeats in Redis.
-  - Responds to shutdown signals cleanly.
+- <!-- prettier-ignore -->
+    - Checks failed tasks and handles retries / dead tasks.
+    - Maintains executor heartbeats in Redis.
+    - Responds to shutdown signals cleanly.
 
 On shutdown (`Ctrl+C`):
 
@@ -239,15 +242,18 @@ On shutdown (`Ctrl+C`):
 Some practical patterns:
 
 - **Single queue, single worker** – simplest:
-  - One worker process with `--queue default`, `--concurrency` tuned to your workload.
+- <!-- prettier-ignore -->
+    - One worker process with `--queue default`, `--concurrency` tuned to your workload.
 
 - **Multiple queues by priority**:
-  - Separate workers for `default`, `urgent`, `reports`, etc.
-  - Each queue can have different concurrency and be scaled independently.
+- <!-- prettier-ignore -->
+    - Separate workers for `default`, `urgent`, `reports`, etc.
+    - Each queue can have different concurrency and be scaled independently.
 
 - **Horizontal scaling**:
-  - Run multiple worker processes for the same queue on one or more machines.
-  - Redis ensures tasks are distributed across workers.
+- <!-- prettier-ignore -->
+    - Run multiple worker processes for the same queue on one or more machines.
+    - Redis ensures tasks are distributed across workers.
 
 Example (two workers for `default`, one for `urgent`):
 
