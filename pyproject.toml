@@ -22,6 +22,8 @@ dev = [
     "python-dotenv",
     "redis",
     "mkdocs-material",
+    "mkdocstrings",
+    "mkdocstrings-python",
     "maturin",
 ]
 tests = [
@@ -30,7 +32,11 @@ tests = [
     "redis"
 ]
 cli = ["fluxqueue-cli"]
-docs = ["mkdocs-material"]
+docs = [
+    "mkdocs-material", 
+    "mkdocstrings",
+    "mkdocstrings-python",
+]
 build = ["maturin"]
 
 [tool.maturin]
