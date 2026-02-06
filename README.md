@@ -6,7 +6,7 @@
 
 **A blazingly fast, lightweight task queue for Python, powered by Rust.**
 
-[Documentation]()
+[Documentation](https://fluxqueue.ccxlv.dev)
 
 </div>
 
