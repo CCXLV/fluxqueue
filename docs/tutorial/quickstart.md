@@ -53,7 +53,7 @@ You can customize tasks with options:
 
 ```python
 @queue.task(
-    name="custom-task-name",  # Custom task name
+    name="custom-task-name",   # Custom task name
     queue="high-priority",     # Use a different queue
     max_retries=5              # Retry up to 5 times on failure
 )
@@ -68,12 +68,6 @@ To process tasks, you need to run a worker. Make sure Redis is running, then sta
 
 ```bash
 fluxqueue start --tasks-module-path myapp.tasks --queue default
-```
-
-Or use the binary directly:
-
-```bash
-fluxqueue-worker --tasks-module-path myapp.tasks --queue default
 ```
 
 The `--tasks-module-path` tells the worker where to find your task functions. It should be the module path where your tasks are defined (e.g., `myapp.tasks` if your tasks are in `myapp/tasks.py`). For more details, see [Defining and Exposing Tasks](defininig_and_exposing_tasks.md).
