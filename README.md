@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="public/logo_full.png" alt="FluxQueue" />
+  <img src="docs/images/logo_full.png" alt="FluxQueue" />
 </p>
 
 <div align="center">
 
 **A blazingly fast, lightweight task queue for Python, powered by Rust.**
 
-[Documentation]()
+[Documentation](https://fluxqueue.ccxlv.dev)
 
 </div>
 
