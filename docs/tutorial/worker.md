@@ -23,13 +23,14 @@ The worker is a standalone Rust-powered process (invoked through the `fluxqueue`
 - Pulls tasks from Redis and executes the corresponding Python functions
 - Handles retries and optionally preserves dead tasks for debugging
 
-You run it via the dedicated Python CLI (`fluxqueue-cli`), which exposes a Python-friendly interface:
+!!! tip
+In development, you will usually run the worker through the dedicated Python CLI (`fluxqueue-cli`), which exposes a Python-friendly interface:
 
-```bash
-fluxqueue start --tasks-module-path myapp.tasks --queue default
-```
+    ```bash
+    fluxqueue start --tasks-module-path myapp.tasks --queue default
+    ```
 
-For advanced use cases, you can also run the underlying Rust binary `fluxqueue-worker` with the same flags, but the `fluxqueue` CLI is the recommended entry point for Python projects.
+    For production, the recommended way is to run the underlying Rust binary `fluxqueue-worker` directly with the same flags. The `fluxqueue` CLI is there to make local development and experimentation nicer.
 
 ---
 
