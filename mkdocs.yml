@@ -48,6 +48,8 @@ nav:
       - tutorial/quickstart.md
       - tutorial/defininig_and_exposing_tasks.md
       - tutorial/worker.md
+  - API Reference:
+      - api/index.md
 
 markdown_extensions:
   - pymdownx.highlight:
