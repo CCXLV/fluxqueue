@@ -69,6 +69,7 @@ nav:
       - api/index.md
       - api/fluxqueue.md
       - api/environment.md
+  - About: about.md
 
 markdown_extensions:
   - pymdownx.highlight:
