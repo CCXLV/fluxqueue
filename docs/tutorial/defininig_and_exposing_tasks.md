@@ -103,6 +103,13 @@ from fluxqueue import FluxQueue
 fluxqueue = FluxQueue()
 ```
 
+<!-- prettier-ignore -->
+!!! note
+    Creating a `FluxQueue` instance does **not** open a TCP connection to Redis.
+    The Redis connection is established only when a task is executed.
+    Because of this, declaring `fluxqueue` as a global object is safe and will not
+    create persistent or idle Redis connections.
+
 **`tasks/email.py`**:
 
 ```python
