@@ -81,6 +81,7 @@ async fn main() -> Result<()> {
     tokio::signal::ctrl_c()
         .await
         .expect("Failed to listen for Ctrl+C");
+
     warn!("Shutdown signal received! Starting graceful shutdown...");
 
     let _ = shutdown_tx.send(true);
