@@ -14,6 +14,10 @@ authors = [
     {name = "Giorgi Merebashvili", email = "mereba2627@gmail.com"}
 ]
 
+[project.urls]
+Repository = "https://github.com/CCXLV/fluxqueue"
+Documentation = "https://fluxqueue.ccxlv.dev"
+
 [project.optional-dependencies]
 dev = [
     "ruff",
