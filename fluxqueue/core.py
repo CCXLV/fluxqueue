@@ -62,9 +62,7 @@ class FluxQueue:
             if is_async:
 
                 @wraps(func)
-                async def async_wrapper(
-                    *args: P.args, **kwargs: P.kwargs
-                ) -> None:
+                async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
                     await self._core._enqueue_async(
                         task_name, queue, max_retries, args, kwargs
                     )
@@ -75,9 +73,7 @@ class FluxQueue:
 
                 @wraps(func)
                 def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
-                    self._core._enqueue(
-                        task_name, queue, max_retries, args, kwargs
-                    )
+                    self._core._enqueue(task_name, queue, max_retries, args, kwargs)
                     return None
 
                 return sync_wrapper
