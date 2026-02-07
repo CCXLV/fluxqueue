@@ -7,7 +7,7 @@ name: Publish to PyPI
 
 on:
   release:
-    types: [published]
+    types: [published, prereleased]
 
 permissions:
   contents: read
@@ -82,7 +82,7 @@ jobs:
         with:
           subject-path: "wheels-*/*"
       - name: Publish to PyPI
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ startsWith(github.event.release.tag_name, 'v') }}
         uses: PyO3/maturin-action@v1
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
