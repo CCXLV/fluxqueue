@@ -78,11 +78,14 @@ jobs:
     steps:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
-      - uses: actions/download-artifact@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: "wheels-*/*"
+          subject-path: "dist/**/*"
       - name: Publish to PyPI
         if: ${{ startsWith(github.event.release.tag_name, 'v') }}
-        run: uv publish
+        run: uv publish "dist/**/*"
