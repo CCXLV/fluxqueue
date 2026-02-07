@@ -34,7 +34,9 @@ tests = [
     "python-dotenv",
     "redis"
 ]
-cli = ["fluxqueue-cli"]
+cli = [
+    "fluxqueue-cli>=0.1.0b4"
+]
 docs = [
     "mkdocs-material", 
     "mkdocstrings",
