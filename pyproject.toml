@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "fluxqueue"
 dynamic = ["version"]
-description = "A blazingly fast, lightweight task queue for Python, powered by Rust"
+description = "A blazingly fast, lightweight task queue for Python, written in Rust"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = "Apache-2.0"
@@ -16,7 +16,6 @@ authors = [
 
 [project.optional-dependencies]
 dev = [
-    "black",
     "ruff",
     "pytest-asyncio",
     "python-dotenv",
@@ -43,12 +42,9 @@ build = ["maturin"]
 python-source = "."
 module-name = "fluxqueue.fluxqueue_core"
 
-[tool.black]
-line-length = 79
-include = '\.pyi?$'
-preview = true
-
 [tool.ruff]
+line-length = 88
+
 [tool.ruff.lint]
 select = [
   "E",   # pycodestyle errors
