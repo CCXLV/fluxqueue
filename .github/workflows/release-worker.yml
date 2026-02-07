@@ -17,6 +17,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure tag is on main
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -32,7 +39,7 @@ jobs:
       - name: Build
         run: scripts/build-worker.sh ${{ env.LINUX_TARGET }}
 
-      - name: Package binary
+      - name: Package the worker
         run: |
           cd dist
           mv fluxqueue-worker-${{ env.LINUX_TARGET }} fluxqueue-worker
