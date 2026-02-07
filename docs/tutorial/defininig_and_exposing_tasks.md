@@ -77,10 +77,10 @@ This pattern:
 When starting the worker, point it to your tasks module:
 
 ```bash
-fluxqueue start --tasks-module-path myapp.tasks --queue default
+fluxqueue start --tasks-module-path myapp/tasks --queue default
 ```
 
-The worker will import `myapp.tasks` and discover all task functions that are exposed in the module.
+The worker will import `myapp/tasks` and discover all task functions that are exposed in the module.
 
 ## How It Works
 
@@ -145,13 +145,13 @@ __all__ = [
 In your first terminal:
 
 ```bash
-fluxqueue start --tasks-module-path myapp.tasks --queue default
+fluxqueue start --tasks-module-path myapp/tasks --queue default
 ```
 
 In a second terminal:
 
 ```bash
-fluxqueue start --tasks-module-path myapp.tasks --queue urgent
+fluxqueue start --tasks-module-path myapp/tasks --queue urgent
 ```
 
 ## Alternative: Single File

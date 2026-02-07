@@ -67,10 +67,10 @@ def important_task(data: str):
 To process tasks, you need to run a worker. Make sure Redis is running, then start the worker:
 
 ```bash
-fluxqueue start --tasks-module-path myapp.tasks --queue default
+fluxqueue start --tasks-module-path myapp/tasks --queue default
 ```
 
-The `--tasks-module-path` tells the worker where to find your task functions. It should be the module path where your tasks are defined (e.g., `myapp.tasks` if your tasks are in `myapp/tasks.py`). For more details, see [Defining and Exposing Tasks](defininig_and_exposing_tasks.md).
+The `--tasks-module-path` tells the worker where to find your task functions. It should be the module path where your tasks are defined (e.g., `myapp/tasks` if your tasks are in `myapp/tasks.py`). For more details, see [Defining and Exposing Tasks](defininig_and_exposing_tasks.md).
 
 ## Complete Example
 
