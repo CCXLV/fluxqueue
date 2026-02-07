@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "fluxqueue-worker"
-version = "0.1.0-rc1"
+version = "0.1.0-beta.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "fluxqueue_core"
-version = "0.1.0-rc1"
+version = "0.1.0-beta.1"
 dependencies = [
  "fluxqueue-common",
  "pyo3",
