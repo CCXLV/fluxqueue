@@ -1,10 +1,10 @@
 target/
 _tests/
 
-.venv
+.venv*
 .env
 
-fluxqueue_core.cpython**
+fluxqueue_core.cp**
 __pycache__/
 .ruff_cache/
 .pytest_cache/

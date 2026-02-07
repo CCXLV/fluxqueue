@@ -7,7 +7,7 @@ name = "fluxqueue"
 dynamic = ["version"]
 description = "A blazingly fast, lightweight task queue for Python, written in Rust"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [

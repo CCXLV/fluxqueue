@@ -4,7 +4,7 @@ FluxQueue has two parts: the Python client library for enqueueing tasks, and the
 
 ## Prerequisites
 
-- Python 3.11, 3.12, or 3.13
+- Python 3.11, 3.12, 3.13 or 3,14
 - Redis server running and accessible
 - Linux (Windows and macOS support coming soon)
 
