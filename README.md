@@ -4,7 +4,7 @@
 
 <div align="center">
 
-**A blazingly fast, lightweight task queue for Python, powered by Rust.**
+**A blazingly fast, lightweight task queue for Python, written in Rust.**
 
 [Documentation](https://fluxqueue.ccxlv.dev)
 
