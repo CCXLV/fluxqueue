@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/logo_full.png" alt="FluxQueue" />
+  <img src="https://fluxqueue.ccxlv.dev/images/logo_full.png" alt="FluxQueue" />
 </p>
 
 <div align="center">

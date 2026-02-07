@@ -27,7 +27,7 @@ The worker is a standalone Rust-powered process (invoked through the `fluxqueue`
 !!! tip
     In development, you will usually run the worker through the dedicated Python CLI (`fluxqueue-cli`), which exposes a Python-friendly interface:
     ```bash
-    fluxqueue start --tasks-module-path myapp.tasks --queue default
+    fluxqueue start --tasks-module-path myapp/tasks --queue default
     ```
 
     For production, the recommended way is to run the underlying Rust binary `fluxqueue-worker` directly with the same flags. The `fluxqueue` CLI is there to make local development and experimentation nicer.
@@ -39,7 +39,7 @@ The worker is a standalone Rust-powered process (invoked through the `fluxqueue`
 Basic usage:
 
 ```bash
-fluxqueue start --tasks-module-path myapp.tasks --queue default
+fluxqueue start --tasks-module-path myapp/tasks --queue default
 ```
 
 The worker runs in the **foreground**.  
@@ -47,10 +47,10 @@ If you want multiple workers (for different queues or higher throughput), run ea
 
 ```bash
 # Terminal 1 – default queue
-fluxqueue start --tasks-module-path myapp.tasks --queue default
+fluxqueue start --tasks-module-path myapp/tasks --queue default
 
 # Terminal 2 – urgent queue
-fluxqueue start --tasks-module-path myapp.tasks --queue urgent
+fluxqueue start --tasks-module-path myapp/tasks --queue urgent
 ```
 
 Press `Ctrl+C` in a worker terminal to trigger **graceful shutdown** (it finishes current work and cleans up executor metadata in Redis).
@@ -95,7 +95,7 @@ Example:
 ```bash
 fluxqueue start \
   --redis-url redis://localhost:6379 \
-  --tasks-module-path myapp.tasks \
+  --tasks-module-path myapp/tasks \
   --queue default
 ```
 
@@ -108,7 +108,7 @@ fluxqueue start \
 
 This should be the **module path**, not a file path:
 
-- `myapp.tasks` → imports `myapp/tasks/__init__.py`
+- `myapp/tasks` → imports `myapp/tasks/__init__.py`
 - `tasks` → imports `tasks.py`
 
 The worker imports that module and inspects it to find callables that have a `task_name` and `queue` attribute (these are normally added by the `@fluxqueue.task()` decorator).  
@@ -130,7 +130,7 @@ Use different queues to separate workloads:
 Example:
 
 ```bash
-fluxqueue start --tasks-module-path myapp.tasks --queue urgent
+fluxqueue start --tasks-module-path myapp/tasks --queue urgent
 ```
 
 ### `--save-dead-tasks`
@@ -259,11 +259,11 @@ Example (two workers for `default`, one for `urgent`):
 
 ```bash
 # Machine 1
-fluxqueue start --tasks-module-path myapp.tasks --queue default --concurrency 4
+fluxqueue start --tasks-module-path myapp/tasks --queue default --concurrency 4
 
 # Machine 2
-fluxqueue start --tasks-module-path myapp.tasks --queue default --concurrency 4
-fluxqueue start --tasks-module-path myapp.tasks --queue urgent --concurrency 2
+fluxqueue start --tasks-module-path myapp/tasks --queue default --concurrency 4
+fluxqueue start --tasks-module-path myapp/tasks --queue urgent --concurrency 2
 ```
 
 ---
