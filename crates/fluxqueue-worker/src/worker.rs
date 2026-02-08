@@ -6,7 +6,7 @@ use rmp_serde::from_slice;
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 
@@ -127,10 +127,11 @@ async fn executor_loop(
                 match res {
                     Ok(Some(raw_data)) => {
                         let task = deserialize_raw_task_data(&raw_data)?;
+                        let task_name = format!("{}:{}", &task.name, &task.id);
 
                         logger.info(format_args!(
                             "Received a task '{}' with a total of {} Bytes",
-                            &task.name,
+                            &task_name,
                             raw_data.len()
                         ));
 
@@ -144,6 +145,7 @@ async fn executor_loop(
                             return Ok(());
                         };
 
+                        let duration_start = Instant::now();
                         let task_result = run_task(&task, task_function).await;
 
                         match task_result {
@@ -153,9 +155,21 @@ async fn executor_loop(
                                     .await {
                                         logger.error(format_args!("Failed to remove the task after successful run: {}", e));
                                 }
+                                let duration_end = duration_start.elapsed();
+                                logger.info(format_args!(
+                                    "Task '{}' successfully finished in {}ms",
+                                    &task_name,
+                                    duration_end.as_millis()
+                                ));
                             }
                             Err(e) => {
-                                logger.error(format_args!("Task '{}' failed: {}", &task.name, e));
+                                let duration_end = duration_start.elapsed();
+                                logger.error(format_args!(
+                                    "Task '{}' failed in {}ms: {}",
+                                    &task_name,
+                                    duration_end.as_millis(),
+                                    e
+                                ));
                                 if let Err(err) = redis_client
                                     .mark_as_failed(&queue_name, &executor_id, &raw_data)
                                     .await {
