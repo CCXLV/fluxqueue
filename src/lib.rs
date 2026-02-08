@@ -1,13 +1,13 @@
+use deadpool_redis::{Config, Runtime};
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use pyo3_async_runtimes::tokio::future_into_py;
-use redis::aio::ConnectionManager;
 
-use fluxqueue_common::{get_redis_client, push_task, push_task_async, serialize_task};
+use fluxqueue_common::{get_redis_connection, push_task, push_task_async, serialize_task};
 
 #[pyclass(subclass)]
 pub struct FluxQueueCore {
-    pub(crate) redis_client: redis::Client,
+    pub(crate) redis_url: String,
 }
 
 #[pymethods]
@@ -19,11 +19,7 @@ impl FluxQueueCore {
         )
     )]
     fn new(redis_url: String) -> PyResult<Self> {
-        let redist_client =
-            get_redis_client(&redis_url).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-        Ok(Self {
-            redis_client: redist_client,
-        })
+        Ok(Self { redis_url })
     }
 
     fn _enqueue(
@@ -37,7 +33,8 @@ impl FluxQueueCore {
         let task_blob = serialize_task(name, max_retries, args, kwargs)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
-        let mut conn = self.redis_client.clone();
+        let mut conn = get_redis_connection(&self.redis_url)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         push_task(&mut conn, queue_name, task_blob)
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
@@ -53,15 +50,18 @@ impl FluxQueueCore {
         args: Py<PyTuple>,
         kwargs: Option<Py<PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let client = self.redis_client.clone();
+        let redis_url = self.redis_url.clone();
 
         let task_blob = serialize_task(name, max_retries, args, kwargs)
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to serialize task: {}", e)))?;
 
         let fut = async move {
-            let mut conn_manager = ConnectionManager::new(client).await.map_err(|e| {
-                PyRuntimeError::new_err(format!("Failed to connect to Redis: {}", e))
-            })?;
+            let redis_config = Config::from_url(redis_url);
+            let redis_pool = redis_config.create_pool(Some(Runtime::Tokio1)).unwrap();
+            let mut conn_manager = redis_pool
+                .get()
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
             push_task_async(&mut conn_manager, queue_name, task_blob)
                 .await

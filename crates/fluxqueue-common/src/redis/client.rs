@@ -1,15 +1,21 @@
 use anyhow::{Context, Result};
-use redis::Client;
-use redis::aio::ConnectionManager;
+use deadpool_redis::{Connection, redis};
 
 use crate::get_queue_key;
 
-pub fn get_redis_client(redis_url: &str) -> Result<Client> {
-    let client = redis::Client::open(redis_url).context("Failed to connect to Redis")?;
-    Ok(client)
+pub fn get_redis_connection(redis_url: &str) -> Result<redis::Connection> {
+    let client = redis::Client::open(redis_url).context("Failed to create Redis client")?;
+    let conn = client
+        .get_connection()
+        .context("Failed to connect to Redis")?;
+    Ok(conn)
 }
 
-pub fn push_task(conn: &mut Client, queue_name: String, task_blob: Vec<u8>) -> Result<()> {
+pub fn push_task(
+    conn: &mut redis::Connection,
+    queue_name: String,
+    task_blob: Vec<u8>,
+) -> Result<()> {
     let queue_key = get_queue_key(&queue_name);
 
     let _: () = redis::cmd("LPUSH")
@@ -22,7 +28,7 @@ pub fn push_task(conn: &mut Client, queue_name: String, task_blob: Vec<u8>) -> R
 }
 
 pub async fn push_task_async(
-    conn: &mut ConnectionManager,
+    conn: &mut Connection,
     queue_name: String,
     task_blob: Vec<u8>,
 ) -> Result<()> {
