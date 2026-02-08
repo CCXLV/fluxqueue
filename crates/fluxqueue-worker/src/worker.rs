@@ -2,17 +2,16 @@ use anyhow::{Context, Result, anyhow};
 use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyModule, PyTuple};
 use pyo3::{Bound, Py, PyAny, Python};
 use pythonize::pythonize;
-use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use rmp_serde::from_slice;
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, watch};
+use tokio::sync::watch;
 use tokio::task::JoinSet;
 
 use crate::logger::{Logger, initial_logs};
-use crate::redis_client::{REDIS_CONN_TIMEOUT, RedisClient};
+use crate::redis_client::RedisClient;
 use crate::task::TaskRegistry;
 use fluxqueue_common::{Task, deserialize_raw_task_data};
 
@@ -24,14 +23,10 @@ pub async fn run_worker(
     queue_name: &str,
     save_dead_tasks: bool,
 ) -> Result<()> {
-    let redis_config =
-        ConnectionManagerConfig::default().set_response_timeout(Some(REDIS_CONN_TIMEOUT));
-    let redis_client = RedisClient::new(&redis_url, redis_config)
-        .await
-        .map_err(|e| {
-            tracing::error!("{}", e);
-            std::process::exit(1);
-        })?;
+    let redis_client = RedisClient::new(redis_url).await.map_err(|e| {
+        tracing::error!("{}", e);
+        std::process::exit(1);
+    })?;
     let redis_client = Arc::new(redis_client);
 
     let task_functions = get_task_functions(&tasks_module_path, queue_name).map_err(|e| {
@@ -59,8 +54,6 @@ pub async fn run_worker(
 
     for i in 0..concurrency {
         let redis_client = Arc::clone(&redis_client);
-        let redis_manager = redis_client.conn_manager.clone();
-
         let queue_name = Arc::clone(&queue_name);
         let executor_id = Arc::clone(&executor_ids[i]);
         let shutdown = shutdown.clone();
@@ -75,7 +68,6 @@ pub async fn run_worker(
             queue_name,
             executor_id,
             redis_client,
-            redis_manager,
             task_registry,
         ));
     }
@@ -83,7 +75,6 @@ pub async fn run_worker(
     let janitor_queue_name = Arc::clone(&queue_name);
     let janitor_redis = Arc::clone(&redis_client);
     let janitor_executor_ids = Arc::clone(&executor_ids);
-    let janitor_manager = Arc::new(Mutex::new(janitor_redis.conn_manager.clone()));
     let janitor_shutdown = shutdown.clone();
     let save_dead_tasks = Arc::new(save_dead_tasks);
 
@@ -93,7 +84,6 @@ pub async fn run_worker(
         janitor_executor_ids,
         save_dead_tasks,
         janitor_redis,
-        janitor_manager,
     ));
 
     shutdown.changed().await.ok();
@@ -118,7 +108,6 @@ async fn executor_loop(
     queue_name: Arc<str>,
     executor_id: Arc<str>,
     redis_client: Arc<RedisClient>,
-    mut redis_manager: ConnectionManager,
     task_registry: Arc<TaskRegistry>,
 ) -> Result<()> {
     let logger = Logger::new(format!("EXECUTOR {}", &executor_id));
@@ -133,7 +122,7 @@ async fn executor_loop(
             }
 
             res = redis_client
-                .mark_task_as_processing(&mut redis_manager, &queue_name, &executor_id)
+                .mark_task_as_processing(&queue_name, &executor_id)
             => {
                 match res {
                     Ok(Some(raw_data)) => {
@@ -148,7 +137,7 @@ async fn executor_loop(
                         let Some(task_function) = task_registry.get(&task.name) else {
                             logger.warn(format_args!("Task '{}' not found in registry. Skipping", &task.name));
                             if let Err(e) = redis_client
-                                .remove_from_processing(&mut redis_manager, &queue_name, &executor_id, &raw_data)
+                                .remove_from_processing(&queue_name, &executor_id, &raw_data)
                                 .await {
                                     logger.error(format_args!("Failed to remove the task: {}", e));
                             }
@@ -160,7 +149,7 @@ async fn executor_loop(
                         match task_result {
                             Ok(_) => {
                                 if let Err(e) = redis_client
-                                    .remove_from_processing(&mut redis_manager, &queue_name, &executor_id, &raw_data)
+                                    .remove_from_processing(&queue_name, &executor_id, &raw_data)
                                     .await {
                                         logger.error(format_args!("Failed to remove the task after successful run: {}", e));
                                 }
@@ -168,7 +157,7 @@ async fn executor_loop(
                             Err(e) => {
                                 logger.error(format_args!("Task '{}' failed: {}", &task.name, e));
                                 if let Err(err) = redis_client
-                                    .mark_as_failed(&mut redis_manager, &queue_name, &executor_id, &raw_data)
+                                    .mark_as_failed(&queue_name, &executor_id, &raw_data)
                                     .await {
                                         logger.error(format_args!("Failed to mark the task '{}' as failed: {}", &task.name, err));
                                 }
@@ -192,7 +181,6 @@ async fn janitor_loop(
     executor_ids: Arc<Vec<Arc<str>>>,
     save_dead_tasks: Arc<bool>,
     redis_client: Arc<RedisClient>,
-    redis_manager: Arc<Mutex<ConnectionManager>>,
 ) -> Result<()> {
     let logger = Logger::new("JANITOR");
 
@@ -206,8 +194,7 @@ async fn janitor_loop(
             }
 
             tasks_res = async {
-                let mut rm = redis_manager.lock().await;
-                redis_client.check_failed_tasks(&mut rm, &queue_name).await
+                redis_client.check_failed_tasks(&queue_name).await
             } => {
                 match tasks_res {
                     Ok(Some(raw_data)) => {
@@ -247,9 +234,8 @@ async fn janitor_loop(
 
             hearbeat = async {
                 let executor_ids = Arc::clone(&executor_ids);
-                let mut rm = redis_manager.lock().await;
                 redis_client
-                    .set_executor_heartbeat(&mut rm, executor_ids)
+                    .set_executor_heartbeat(executor_ids)
                     .await
             } => {
                 match hearbeat {

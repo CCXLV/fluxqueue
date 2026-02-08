@@ -1,33 +1,26 @@
 use anyhow::{Context, Ok, Result};
 use chrono::Utc;
-use redis::aio::{ConnectionManager, ConnectionManagerConfig};
+use deadpool_redis::{Config, Runtime, redis, redis::AsyncCommands, redis::Direction};
 use std::sync::Arc;
-use std::time::Duration;
 
-use fluxqueue_common::{
-    Task, deserialize_raw_task_data, get_redis_client, keys, serialize_task_data,
-};
-
-pub const REDIS_QUEUE_TIMEOUT: Duration = Duration::from_secs(1);
-pub const REDIS_CONN_TIMEOUT: Duration = Duration::from_secs(5);
+use fluxqueue_common::{Task, deserialize_raw_task_data, keys, serialize_task_data};
 
 pub struct RedisClient {
-    pub(crate) conn_manager: ConnectionManager,
+    pub(crate) redis_pool: deadpool_redis::Pool,
 }
 
 impl RedisClient {
-    pub async fn new(redis_url: &str, config: ConnectionManagerConfig) -> Result<Self> {
-        let redis_client = get_redis_client(redis_url)?;
+    pub async fn new(redis_url: &str) -> Result<Self> {
+        let redis_config = Config::from_url(redis_url);
+        let redis_pool = redis_config
+            .create_pool(Some(Runtime::Tokio1))
+            .context("Failed to create Redis pool")?;
 
-        let conn_manager = ConnectionManager::new_with_config(redis_client, config)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to connect to Redis: {}", e))?;
-
-        Ok(Self { conn_manager })
+        Ok(Self { redis_pool })
     }
 
     pub async fn register_executor(&self, queue_name: &str, executor_id: &str) -> Result<()> {
-        let mut conn = self.conn_manager.clone();
+        let mut conn = self.redis_pool.get().await?;
         let executors_key = keys::get_executors_key(queue_name);
 
         let _: () = redis::cmd("SADD")
@@ -40,11 +33,9 @@ impl RedisClient {
         Ok(())
     }
 
-    pub async fn set_executor_heartbeat(
-        &self,
-        conn: &mut ConnectionManager,
-        executor_ids: Arc<Vec<Arc<str>>>,
-    ) -> Result<()> {
+    pub async fn set_executor_heartbeat(&self, executor_ids: Arc<Vec<Arc<str>>>) -> Result<()> {
+        let mut conn = self.redis_pool.get().await?;
+
         for id in executor_ids.iter() {
             let heartbeat_key = keys::get_heartbeat_key(id);
 
@@ -53,7 +44,7 @@ impl RedisClient {
                 .arg(1)
                 .arg("EX")
                 .arg(15)
-                .query_async(conn)
+                .query_async(&mut conn)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to set executor heartbeat: {}", e))?;
         }
@@ -66,7 +57,7 @@ impl RedisClient {
         queue_name: &str,
         ids: Arc<Vec<Arc<str>>>,
     ) -> Result<()> {
-        let mut conn = self.conn_manager.clone();
+        let mut conn = self.redis_pool.get().await?;
         let executors_key = keys::get_executors_key(queue_name);
 
         for id in ids.iter() {
@@ -82,7 +73,7 @@ impl RedisClient {
     }
 
     pub async fn push_task(&self, queue_name: String, task_blob: Vec<u8>) -> Result<()> {
-        let mut conn = self.conn_manager.clone();
+        let mut conn = self.redis_pool.get().await?;
 
         fluxqueue_common::push_task_async(&mut conn, queue_name, task_blob).await?;
 
@@ -91,20 +82,22 @@ impl RedisClient {
 
     pub async fn mark_task_as_processing(
         &self,
-        conn: &mut ConnectionManager,
         queue_name: &str,
         executor_id: &str,
     ) -> Result<Option<Vec<u8>>> {
+        let mut conn = self.redis_pool.get().await?;
+
         let queue_key = keys::get_queue_key(queue_name);
         let processing_key = keys::get_processing_key(queue_name, executor_id);
 
-        let raw_data: Option<Vec<u8>> = redis::cmd("BLMOVE")
-            .arg(queue_key)
-            .arg(processing_key)
-            .arg("RIGHT")
-            .arg("LEFT")
-            .arg(REDIS_QUEUE_TIMEOUT.as_secs())
-            .query_async(conn)
+        let raw_data: Option<Vec<u8>> = conn
+            .blmove(
+                queue_key,
+                processing_key,
+                Direction::Right,
+                Direction::Left,
+                1.0,
+            )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to mark task as processing: {}", e))?;
 
@@ -113,18 +106,15 @@ impl RedisClient {
 
     pub async fn remove_from_processing(
         &self,
-        conn: &mut ConnectionManager,
         queue_name: &str,
         executor_id: &str,
         task_bytes: &[u8],
     ) -> Result<()> {
+        let mut conn = self.redis_pool.get().await?;
         let processing_key = keys::get_processing_key(queue_name, executor_id);
 
-        let _: () = redis::cmd("LREM")
-            .arg(processing_key)
-            .arg(1)
-            .arg(task_bytes)
-            .query_async(conn)
+        let _: () = conn
+            .lrem(processing_key, 1, task_bytes)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to remove task from processing queue: {}", e))?;
 
@@ -133,11 +123,12 @@ impl RedisClient {
 
     pub async fn mark_as_failed(
         &self,
-        conn: &mut ConnectionManager,
         queue_name: &str,
         executor_id: &str,
         task_bytes: &Vec<u8>,
     ) -> Result<()> {
+        let mut conn = self.redis_pool.get().await?;
+
         let processing_key = keys::get_processing_key(queue_name, executor_id);
         let failed_key = keys::get_failed_key(queue_name);
 
@@ -158,18 +149,16 @@ impl RedisClient {
             .atomic()
             .zadd(failed_key, &new_task_bytes, retry_at)
             .lrem(processing_key, 1, task_bytes)
-            .query_async(conn)
+            .query_async(&mut *conn)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to mark task as failed: {}", e))?;
 
         Ok(())
     }
 
-    pub async fn check_failed_tasks(
-        &self,
-        conn: &mut ConnectionManager,
-        queue_name: &str,
-    ) -> Result<Option<Vec<u8>>> {
+    pub async fn check_failed_tasks(&self, queue_name: &str) -> Result<Option<Vec<u8>>> {
+        let mut conn = self.redis_pool.get().await?;
+
         let _queue_key = keys::get_queue_key(queue_name);
         let failed_key = keys::get_failed_key(queue_name);
 
@@ -178,13 +167,17 @@ impl RedisClient {
 
         let now = Utc::now().timestamp();
 
-        let raw_data: Option<Vec<u8>> = script.key(&failed_key).arg(now).invoke_async(conn).await?;
+        let raw_data: Option<Vec<u8>> = script
+            .key(&failed_key)
+            .arg(now)
+            .invoke_async(&mut conn)
+            .await?;
 
         Ok(raw_data)
     }
 
     pub async fn push_dead_task(&self, queue_name: &str, task_blob: Vec<u8>) -> Result<()> {
-        let mut conn = self.conn_manager.clone();
+        let mut conn = self.redis_pool.get().await?;
         let queue_key = keys::get_dead_key(&queue_name);
 
         let _: () = redis::cmd("LPUSH")
