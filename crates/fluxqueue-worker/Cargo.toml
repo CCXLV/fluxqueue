@@ -1,6 +1,6 @@
 [package]
 name = "fluxqueue-worker"
-version = "0.2.0-beta.1"
+version = "0.2.0-beta.2"
 edition = "2024"
 
 [lib]
@@ -15,6 +15,7 @@ path = "src/main.rs"
 pyo3-async-runtimes = { version = "0.27.0", features = ["tokio-runtime"] }
 uuid = { version = "1.20.0", features = ["v4"] }
 redis = "0.32.7"
+deadpool-redis = { version = "0.22.1", features = ["rt_tokio_1"] }
 tokio = { version = "1.49.0", features = [
   "macros",
   "rt-multi-thread",
@@ -33,4 +34,3 @@ pythonize = "0.27.0"
 chrono = "0.4.43"
 
 fluxqueue-common.workspace = true
-deadpool-redis = { version = "0.22.1", features = ["rt_tokio_1"] }
