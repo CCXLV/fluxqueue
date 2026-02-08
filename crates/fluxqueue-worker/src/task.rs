@@ -14,7 +14,6 @@ impl TaskRegistry {
         }
     }
 
-    // TODO: Add task name duplication error
     pub fn insert(&self, name: String, func: Py<PyAny>) -> Result<()> {
         let mut tasks = self.tasks.write().map_err(|_| {
             anyhow::anyhow!("Internal Error: Task registry lock poisoned (a thread panicked)")
