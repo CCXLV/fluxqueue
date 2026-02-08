@@ -340,9 +340,9 @@ fn get_task_functions(module_path: &str, queue_name: &str) -> Result<Vec<(String
 
         let py_funcs: Bound<'_, PyDict> = module
             .getattr("list_functions")
-            .map_err(|e| anyhow!("Failed to get 'list_functions': {}", e))?
+            .map_err(|e| anyhow!("Failed to get 'list_functions' script: {}", e))?
             .call1((real_module_path, queue_name))
-            .map_err(|e| anyhow!("Failed to execute 'list_functions' to get tasks: {}", e))?
+            .map_err(|e| anyhow!("Failed to get tasks: {}", e))?
             .cast_into::<PyDict>()
             .map_err(|_| anyhow!("Failed to cast result to a Python Dictionary"))?;
 

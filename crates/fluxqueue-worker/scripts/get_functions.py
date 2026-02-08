@@ -12,6 +12,9 @@ def list_functions(module_path: str, queue: str):
             continue
 
         if inspect.isfunction(obj) or (inspect.isbuiltin(obj) and task_name):
+            if funcs.get(task_name):
+                raise ValueError(f"Task name '{task_name}' is duplicated")
+
             original_func = getattr(obj, "__wrapped__", obj)
             funcs[task_name] = original_func
     return funcs
