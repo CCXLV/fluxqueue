@@ -63,6 +63,8 @@ pub async fn run_worker(
             .register_executor(&queue_name, &executor_id)
             .await?;
 
+        redis_client.set_executor_heartbeat(&executor_id).await?;
+
         executors.spawn(executor_loop(
             shutdown,
             queue_name,
@@ -249,7 +251,7 @@ async fn janitor_loop(
             hearbeat = async {
                 let executor_ids = Arc::clone(&executor_ids);
                 redis_client
-                    .set_executor_heartbeat(executor_ids)
+                    .set_executors_heartbeat(executor_ids)
                     .await
             } => {
                 match hearbeat {
