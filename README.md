@@ -98,7 +98,7 @@ It picks the latest released worker based on your python version and installs it
 Running the worker is straightforward:
 
 ```bash
-fluxqueue start --tasks-module-path tasks
+fluxqueue start --tasks-module-path myapp/tasks
 ```
 
 In order the worker to disover your tasks you need to pass `--tasks-module-path` argument with the path to the tasks module. For more information please view the [documentation](https://fluxqueue.ccxlv.dev/tutorial/defininig_and_exposing_tasks).
