@@ -33,21 +33,26 @@ impl RedisClient {
         Ok(())
     }
 
-    pub async fn set_executor_heartbeat(&self, executor_ids: Arc<Vec<Arc<str>>>) -> Result<()> {
-        let mut conn = self.redis_pool.get().await?;
-
+    pub async fn set_executors_heartbeat(&self, executor_ids: Arc<Vec<Arc<str>>>) -> Result<()> {
         for id in executor_ids.iter() {
-            let heartbeat_key = keys::get_heartbeat_key(id);
-
-            let _: () = redis::cmd("SET")
-                .arg(heartbeat_key)
-                .arg(1)
-                .arg("EX")
-                .arg(15)
-                .query_async(&mut conn)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to set executor heartbeat: {}", e))?;
+            self.set_executor_heartbeat(id).await?;
         }
+
+        Ok(())
+    }
+
+    pub async fn set_executor_heartbeat(&self, executor_id: &str) -> Result<()> {
+        let mut conn = self.redis_pool.get().await?;
+        let heartbeat_key = keys::get_heartbeat_key(executor_id);
+
+        let _: () = redis::cmd("SET")
+            .arg(heartbeat_key)
+            .arg(1)
+            .arg("EX")
+            .arg(15)
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to set executor heartbeat: {}", e))?;
 
         Ok(())
     }
