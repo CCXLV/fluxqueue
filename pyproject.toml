@@ -8,10 +8,27 @@ dynamic = ["version"]
 description = "A blazingly fast, lightweight task queue for Python, written in Rust"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
+keywords = ["task-queue", "queue", "redis", "async", "background-tasks", "worker", "rust", "fluxqueue"]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [
     {name = "Giorgi Merebashvili", email = "mereba2627@gmail.com"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache License 2.0",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: System :: Distributed Computing",
 ]
 
 [project.urls]
