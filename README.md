@@ -41,17 +41,15 @@ FluxQueue is a task queue for Python that gets out of your way. The Rust core ma
 pip install fluxqueue[cli]
 ```
 
-## Example
+## How to use FluxQueue
 
-`tasks.py`
+FluxQueue can be used very easily. For example here's how `myapp/tasks.py` could look like:
 
 ```py
 from fluxqueue import FluxQueue
 
-# Create a FluxQueue instance (defaults to redis://127.0.0.1:6379)
 fluxqueue = FluxQueue()
 
-# Define a task using the @fluxqueue.task decorator
 @fluxqueue.task()
 def send_email(to: str, subject: str, body: str):
     print(f"Sending email to {to}")
@@ -59,34 +57,31 @@ def send_email(to: str, subject: str, body: str):
     print(f"Body: {body}")
 ```
 
-## Enqueue Tasks
+### Enqueue Tasks
 
 Call the decorated function to enqueue it. The function returns immediately, the actual work happens in the background:
 
 ```python
-# Enqueue the task
 send_email("user@example.com", "Hello", "This is a test email")
 ```
 
 The task is now in the queue, waiting to be processed by a worker.
 
-## Async Tasks
+### Async Tasks
 
 FluxQueue supports async functions too. Just define an async function and use the same decorator:
 
 ```python
 @fluxqueue.task()
 async def process_data(data: dict):
-    # Your async processing logic
     await some_async_operation(data)
-
-# Enqueue it (use await in async contexts)
-await process_data({"key": "value"})
 ```
+
+Running the async function in an async context will also enqueue the task.
 
 ## Installing the worker
 
-In order the tasks to be executed you need to run a FluxQueue worker, you need to install the worker on your system with:
+In order the tasks to be executed you need to run a FluxQueue worker, you need to install the worker on your system using, recommended way of installing is using `fluxqueue-worker`:
 
 ```bash
 fluxqueue worker install
