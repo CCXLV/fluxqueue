@@ -22,9 +22,10 @@ This decorator is used to mark a function as a task function, which lets you enq
 @fluxqueue.task()
 def send_email_task(email: str):
     send_email(email)
-    
+
 send_email_task()
 ```
+
 When the function is executed, it internally calls a Rust method that establishes a Redis connection and pushes the task into the queue. This entire process is handled on the Rust side of the library.
 
 On the Python side, the only responsibility is dispatching based on the function type. If the function is asynchronous, the async Redis connection method is used, and the resulting Rust Future is converted into a Python awaitable using `pyo3_async_runtimes::tokio::future_into_py`, allowing it to be awaited in Python. If the function is synchronous, a standard (blocking) Redis connection is used instead.
