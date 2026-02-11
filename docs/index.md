@@ -5,7 +5,7 @@
   <img src="images/logo_full.png" alt="FluxQueue" />
 </p>
 
-Welcome to FluxQueue documentation. FluxQueue is a blazingly fast, lightweight task queue for Python, powered by Rust.
+Welcome to FluxQueue documentation. FluxQueue is lightweight, high-throughput task queue for Python, written in Rust.
 
 ## Quick Links
 
@@ -21,8 +21,8 @@ FluxQueue is a task queue for Python that gets out of your way. The Rust core ma
 
 ## Key Features
 
-- **Fast**: Rust-powered core for efficient task enqueueing and processing
-- **Lightweight**: Minimal dependencies and low memory footprint
+- **Lightweight**: Minimal dependencies, low memory footprint, and low CPU usage even at high concurrency
+- **High Throughput**: Rust-powered core for efficient task enqueueing and processing
 - **Redis-Backed**: Reliable task persistence and distribution
 - **Async & Sync**: Support for both synchronous and asynchronous Python functions
 - **Retry Mechanism**: Built-in automatic retry with configurable limits
