@@ -6,7 +6,9 @@
 
 **A blazingly fast, lightweight task queue for Python, written in Rust.**
 
-[Documentation](https://fluxqueue.ccxlv.dev)
+![Python versions](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-green)
+
+[Documentation](https://fluxqueue.ccxlv.dev) · [Benchmarks](https://github.com/CCXLV/fluxqueue-benchmarks)
 
 </div>
 
