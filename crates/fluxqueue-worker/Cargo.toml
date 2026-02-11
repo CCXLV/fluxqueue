@@ -32,5 +32,6 @@ clap = { version = "4.5.56", features = ["derive", "env"] }
 anyhow = "1.0.100"
 pythonize = "0.27.0"
 chrono = "0.4.43"
+num_cpus = "1.17.0"
 
 fluxqueue-common.workspace = true

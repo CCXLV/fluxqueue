@@ -12,7 +12,7 @@ use tokio::task::JoinSet;
 
 use crate::logger::{Logger, initial_logs};
 use crate::redis_client::RedisClient;
-use crate::task::TaskRegistry;
+use crate::task::{PythonDispatcher, TaskRegistry};
 use fluxqueue_common::{Task, deserialize_raw_task_data};
 
 pub async fn run_worker(
@@ -50,6 +50,7 @@ pub async fn run_worker(
 
     let queue_name = Arc::from(queue_name.to_string());
     let executor_ids = generate_executor_ids(concurrency);
+    let python_dispatcher = Arc::new(PythonDispatcher::new());
     let mut executors = JoinSet::new();
 
     for i in 0..concurrency {
@@ -58,6 +59,7 @@ pub async fn run_worker(
         let executor_id = Arc::clone(&executor_ids[i]);
         let shutdown = shutdown.clone();
         let task_registry = Arc::clone(&task_registry);
+        let python_dispatcher = Arc::clone(&python_dispatcher);
 
         redis_client
             .register_executor(&queue_name, &executor_id)
@@ -71,6 +73,7 @@ pub async fn run_worker(
             executor_id,
             redis_client,
             task_registry,
+            python_dispatcher,
         ));
     }
 
@@ -111,6 +114,7 @@ async fn executor_loop(
     executor_id: Arc<str>,
     redis_client: Arc<RedisClient>,
     task_registry: Arc<TaskRegistry>,
+    python_dispatcher: Arc<PythonDispatcher>,
 ) -> Result<()> {
     let logger = Logger::new(format!("EXECUTOR {}", &executor_id));
 
@@ -148,7 +152,7 @@ async fn executor_loop(
                         };
 
                         let duration_start = Instant::now();
-                        let task_result = run_task(&task, task_function).await;
+                        let task_result = run_task(python_dispatcher.clone(), &task, task_function).await;
 
                         match task_result {
                             Ok(_) => {
@@ -268,7 +272,11 @@ async fn janitor_loop(
     }
 }
 
-async fn run_task(task: &Task, task_function: Arc<Py<PyAny>>) -> Result<()> {
+async fn run_task(
+    python_dispatcher: Arc<PythonDispatcher>,
+    task: &Task,
+    task_function: Arc<Py<PyAny>>,
+) -> Result<()> {
     let task_args: rmpv::Value = from_slice(&task.args).context(format!(
         "Failed to deserialize task {} function args",
         task.name
@@ -278,47 +286,83 @@ async fn run_task(task: &Task, task_function: Arc<Py<PyAny>>) -> Result<()> {
         task.name
     ))?;
 
-    tokio::task::spawn_blocking(move || {
-        Python::attach(|py| -> Result<()> {
-            let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
-            let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
+    let maybe_coro = Python::attach(|py| -> Result<Option<Py<PyAny>>> {
+        let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
+        let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
 
-            let args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
-                list.to_tuple()
-            } else if let Ok(tuple) = py_args.cast::<PyTuple>() {
-                tuple.clone()
-            } else {
-                anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
-            };
+        let args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
+            list.to_tuple()
+        } else if let Ok(tuple) = py_args.cast::<PyTuple>() {
+            tuple.clone()
+        } else {
+            anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
+        };
 
-            let kwargs_dict = py_kwargs
-                .cast_into::<PyDict>()
-                .map_err(|_| anyhow!("Kwargs must be a map/dict"))?;
+        let kwargs_dict = py_kwargs
+            .cast_into::<PyDict>()
+            .map_err(|_| anyhow!("Kwargs must be a map/dict"))?;
 
-            let result = task_function
-                .call(py, args_tuple, Some(&kwargs_dict))
-                .map_err(|e| anyhow!("Failed to call Python function: {:?}", e))?;
+        let result = task_function
+            .call(py, args_tuple, Some(&kwargs_dict))
+            .map_err(|e| anyhow!("Failed to call Python function: {:?}", e))?;
 
-            let bound_result = result.bind(py);
-            let is_coroutine = bound_result
-                .hasattr("__await__")
-                .map_err(|_| anyhow!("Failed to check if result is awaitable"))?;
+        let bound_result = result.bind(py);
+        let is_coroutine = bound_result
+            .hasattr("__await__")
+            .map_err(|_| anyhow!("Failed to check if result is awaitable"))?;
 
-            if is_coroutine {
-                let asyncio = py.import("asyncio")?;
-                let run_func = asyncio.getattr("run")?;
+        if is_coroutine {
+            Ok(Some(result))
+        } else {
+            Ok(None)
+        }
+    })?;
 
-                if !run_func.is_callable() {
-                    anyhow::bail!("asyncio.run() not callable. Python 3.7+ required");
-                }
+    if let Some(coro) = maybe_coro {
+        python_dispatcher.execute(coro).await?;
+    }
 
-                run_func.call1((result,))?;
-            }
-            Ok(())
-        })
-    })
-    .await
-    .map_err(|e| anyhow!("Task execution panicked: {}", e))??;
+    // tokio::task::spawn_blocking(move || {
+    //     Python::attach(|py| -> Result<()> {
+    //         let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
+    //         let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
+
+    //         let args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
+    //             list.to_tuple()
+    //         } else if let Ok(tuple) = py_args.cast::<PyTuple>() {
+    //             tuple.clone()
+    //         } else {
+    //             anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
+    //         };
+
+    //         let kwargs_dict = py_kwargs
+    //             .cast_into::<PyDict>()
+    //             .map_err(|_| anyhow!("Kwargs must be a map/dict"))?;
+
+    //         let result = task_function
+    //             .call(py, args_tuple, Some(&kwargs_dict))
+    //             .map_err(|e| anyhow!("Failed to call Python function: {:?}", e))?;
+
+    //         let bound_result = result.bind(py);
+    //         let is_coroutine = bound_result
+    //             .hasattr("__await__")
+    //             .map_err(|_| anyhow!("Failed to check if result is awaitable"))?;
+
+    //         if is_coroutine {
+    //             let asyncio = py.import("asyncio")?;
+    //             let run_func = asyncio.getattr("run")?;
+
+    //             if !run_func.is_callable() {
+    //                 anyhow::bail!("asyncio.run() not callable. Python 3.7+ required");
+    //             }
+
+    //             run_func.call1((result,))?;
+    //         }
+    //         Ok(())
+    //     })
+    // })
+    // .await
+    // .map_err(|e| anyhow!("Task execution panicked: {}", e))??;
 
     Ok(())
 }
