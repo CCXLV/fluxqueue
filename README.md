@@ -78,8 +78,7 @@ FluxQueue supports async functions too. Just define an async function and use th
 @fluxqueue.task()
 async def process_data(data: dict):
     # Your async processing logic
-    result = await some_async_operation(data)
-    return result
+    await some_async_operation(data)
 
 # Enqueue it (use await in async contexts)
 await process_data({"key": "value"})
@@ -87,7 +86,7 @@ await process_data({"key": "value"})
 
 ## Installing the worker
 
-In order the tasks to be executed you need to run a fluxqueue worker, you need to install the worker on your system with:
+In order the tasks to be executed you need to run a FluxQueue worker, you need to install the worker on your system with:
 
 ```bash
 fluxqueue worker install
@@ -103,7 +102,7 @@ Running the worker is straightforward:
 fluxqueue start --tasks-module-path myapp/tasks
 ```
 
-In order the worker to disover your tasks you need to pass `--tasks-module-path` argument with the path to the tasks module. For more information please view the [documentation](https://fluxqueue.ccxlv.dev/tutorial/defininig_and_exposing_tasks).
+In order the worker to disover your tasks you need to pass `--tasks-module-path` argument with the path to the tasks module. For more information please view the [Defining and Exposing Tasks](https://fluxqueue.ccxlv.dev/tutorial/defininig_and_exposing_tasks) documentation.
 
 ## License
 
