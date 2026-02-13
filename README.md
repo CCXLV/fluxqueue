@@ -4,7 +4,7 @@
 
 <div align="center">
 
-**A lightweight, high-throughput task queue for Python, written in Rust.**
+**A lightweight, resource-efficient, high-throughput task queue for Python, written in Rust.**
 
 ![Python versions](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-green)
 

@@ -5,7 +5,7 @@
   <img src="images/logo_full.png" alt="FluxQueue" />
 </p>
 
-Welcome to FluxQueue documentation. FluxQueue is lightweight, high-throughput task queue for Python, written in Rust.
+Welcome to FluxQueue documentation. FluxQueue is a lightweight, resource-efficient, high-throughput task queue for Python, written in Rust.
 
 ## Quick Links
 
