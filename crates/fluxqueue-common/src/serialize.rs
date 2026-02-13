@@ -68,25 +68,28 @@ pub fn serialize_task_data(task: &Task) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pyo3::BoundObject;
 
     #[test]
     fn test_serialize_task() -> Result<()> {
-        let task = Task {
-            id: "ID".to_string(),
-            name: "test-task".to_string(),
-            args: vec![],
-            kwargs: vec![],
-            created_at: 10,
-            retries: 0,
-            max_retries: 3,
-        };
+        Python::initialize();
+        Python::attach(|py| {
+            let characters = ["Giorgi", "Glakhuna", "Konstantine"];
+            let args = PyTuple::new(py, characters)?;
 
-        let task_blob = serialize_task_data(&task)?;
+            let serialized_data = serialize_task(
+                "the-right-hand-of-the-grand-master".to_string(),
+                3,
+                args.into(),
+                None,
+            )?;
 
-        assert_eq!(task_blob.len(), 19);
-        assert_eq!(task_blob[0], 151);
+            assert_eq!(serialized_data.len(), 121);
+            assert_eq!(serialized_data[0], 151);
+            assert_eq!(serialized_data[serialized_data.len() - 1], 3);
 
-        Ok(())
+            Ok(())
+        })
     }
 
     #[test]
@@ -114,5 +117,26 @@ mod tests {
         assert_eq!(task.max_retries, deserialized_task.max_retries);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_serialize_python_to_msgpack() -> Result<()> {
+        Python::initialize();
+        Python::attach(|py| {
+            let py_dict = PyDict::new(py);
+
+            py_dict.set_item("name", "George").unwrap();
+            py_dict.set_item("age", 20).unwrap();
+
+            let bound_dict = py_dict.into_bound().into_any();
+
+            let serialized_msgpack = serialize_python_to_msgpack(bound_dict)?;
+
+            assert_eq!(serialized_msgpack.len(), 18);
+            assert_eq!(serialized_msgpack[0], 130);
+            assert_eq!(serialized_msgpack[serialized_msgpack.len() - 1], 101);
+
+            Ok(())
+        })
     }
 }
