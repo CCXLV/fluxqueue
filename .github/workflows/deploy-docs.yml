@@ -7,10 +7,11 @@ on:
 
 jobs:
   deploy-docs:
+    if: (github.repository_owner == 'ccxlv')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repo
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Python3.13
