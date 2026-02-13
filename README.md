@@ -97,7 +97,7 @@ Running the worker is straightforward:
 fluxqueue start --tasks-module-path myapp/tasks
 ```
 
-In order the worker to disover your tasks you need to pass `--tasks-module-path` argument with the path to the tasks module. For more information please view the [Defining and Exposing Tasks](https://fluxqueue.ccxlv.dev/tutorial/defininig_and_exposing_tasks) documentation.
+In order the worker to disover your tasks you need to pass `--tasks-module-path` argument with the path to the tasks module. For more information please view the [defining and exposing tasks](https://fluxqueue.ccxlv.dev/tutorial/defininig_and_exposing_tasks) documentation.
 
 ## License
 

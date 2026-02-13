@@ -50,7 +50,6 @@ pub async fn run_worker(
 
     let queue_name = Arc::from(queue_name.to_string());
     let executor_ids = generate_executor_ids(concurrency);
-    let python_dispatcher = Arc::new(PythonDispatcher::new());
     let mut executors = JoinSet::new();
 
     for i in 0..concurrency {
@@ -59,7 +58,7 @@ pub async fn run_worker(
         let executor_id = Arc::clone(&executor_ids[i]);
         let shutdown = shutdown.clone();
         let task_registry = Arc::clone(&task_registry);
-        let python_dispatcher = Arc::clone(&python_dispatcher);
+        let python_dispatcher = Arc::new(PythonDispatcher::new());
 
         redis_client
             .register_executor(&queue_name, &executor_id)
