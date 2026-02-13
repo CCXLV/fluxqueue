@@ -1,6 +1,6 @@
 # Installation
 
-FluxQueue has two parts: the Python client library for enqueueing tasks, and the Rust worker that executes them. Both use Rust under the hood for speed. The worker needs to be installed separately on your system. Currently Linux is supported, with Windows and macOS support coming soon. The Python version range will be expanded in future releases as well.
+FluxQueue has two parts: the Python client library for enqueueing tasks, and the Rust worker that executes them. Both use Rust under the hood for it's low memory usage. The worker needs to be installed separately on your system. Currently Linux is supported, with Windows and macOS support coming soon. The Python version range will be expanded in future releases as well.
 
 ## Prerequisites
 
