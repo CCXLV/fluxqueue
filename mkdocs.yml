@@ -1,4 +1,5 @@
 site_name: FluxQueue
+site_description: A lightweight, resource-efficient, high-throughput task queue for Python, written in Rust.
 
 theme:
   name: material
@@ -65,10 +66,10 @@ nav:
       - tutorial/quickstart.md
       - tutorial/defininig_and_exposing_tasks.md
       - tutorial/worker.md
-  - How it Works:
-      - how-it-works/index.md
-      - how-it-works/client.md
-      - how-it-works/worker.md
+  # - How it Works:
+  #     - how-it-works/index.md
+  #     - how-it-works/client.md
+  #     - how-it-works/worker.md
   - API Reference:
       - api/index.md
       - api/fluxqueue.md
