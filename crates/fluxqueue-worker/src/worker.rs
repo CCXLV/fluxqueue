@@ -337,7 +337,7 @@ fn get_task_functions(module_path: &str, queue_name: &str) -> Result<Vec<(String
         .ancestors()
         .find(|p| p.join("tests").exists())
         .unwrap_or(&full_current_dir);
-    let real_module_path = path_to_module_path(&project_root, &clean_module_path);
+    let real_module_path = path_to_module_path(project_root, &clean_module_path);
 
     if !clean_module_path.exists() || real_module_path.is_none() {
         return Err(anyhow!(
@@ -393,7 +393,7 @@ fn normalize_path(path: &Path) -> PathBuf {
     components.iter().collect()
 }
 
-fn path_to_module_path(current_dir: &Path, target_path: &PathBuf) -> Option<String> {
+fn path_to_module_path(current_dir: &Path, target_path: &Path) -> Option<String> {
     let rel_path = target_path.strip_prefix(current_dir).ok()?;
 
     let mut components: Vec<String> = rel_path
@@ -401,10 +401,10 @@ fn path_to_module_path(current_dir: &Path, target_path: &PathBuf) -> Option<Stri
         .map(|c| c.as_os_str().to_string_lossy().to_string())
         .collect();
 
-    if let Some(last) = components.last_mut() {
-        if let Some(pos) = last.rfind('.') {
-            last.truncate(pos);
-        }
+    if let Some(last) = components.last_mut()
+        && let Some(pos) = last.rfind('.')
+    {
+        last.truncate(pos);
     }
 
     Some(components.join("."))

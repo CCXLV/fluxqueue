@@ -55,7 +55,7 @@ pub fn serialize_python_to_msgpack(object: Bound<'_, PyAny>) -> Result<Vec<u8>> 
     Ok(bytes)
 }
 
-pub fn deserialize_raw_task_data(raw_data: &Vec<u8>) -> Result<Task> {
+pub fn deserialize_raw_task_data(raw_data: &[u8]) -> Result<Task> {
     let task: Task = from_slice(raw_data).context("Failed to deserialize task data")?;
     Ok(task)
 }
