@@ -18,27 +18,27 @@ use fluxqueue_common::{Task, deserialize_raw_task_data};
 pub async fn run_worker(
     mut shutdown: watch::Receiver<bool>,
     concurrency: usize,
-    redis_url: &str,
+    redis_url: String,
     tasks_module_path: String,
-    queue_name: &str,
+    queue_name: String,
     save_dead_tasks: bool,
 ) -> Result<()> {
-    let redis_client = RedisClient::new(redis_url).await.map_err(|e| {
+    let redis_client = RedisClient::new(&redis_url).await.map_err(|e| {
         tracing::error!("{}", e);
         std::process::exit(1);
     })?;
     let redis_client = Arc::new(redis_client);
 
-    let task_functions = get_task_functions(&tasks_module_path, queue_name).map_err(|e| {
+    let task_functions = get_task_functions(&tasks_module_path, &queue_name).map_err(|e| {
         tracing::error!("{}", e);
         std::process::exit(1);
     })?;
     let task_names: Vec<&String> = task_functions.iter().map(|(name, _obj)| name).collect();
 
     initial_logs(
-        queue_name,
+        &queue_name,
         concurrency,
-        redis_url,
+        &redis_url,
         &tasks_module_path,
         &task_names,
     );
@@ -630,9 +630,8 @@ mod tests {
 
         let module_path_str = get_test_module_path("test_tasks_module.py");
         let redis_version = std::env::var("REDIS_VERSION").unwrap_or("latest".to_string());
-        let redis_url = "redis://localhost:6379";
 
-        GenericImage::new("redis", &redis_version)
+        let container = GenericImage::new("redis", &redis_version)
             .with_exposed_port(6379.tcp())
             .with_wait_for(WaitFor::message_on_stdout("Ready to accept connections"))
             .with_network("bridge")
@@ -641,6 +640,10 @@ mod tests {
             .await
             .expect("Failed to start Redis");
 
+        let mapped_port = container.get_host_port_ipv4(6379).await?;
+        let redis_url = format!("redis://localhost:{:?}", mapped_port);
+        let cloned_redis_url = redis_url.clone();
+
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
         let worker_handle = tokio::spawn(run_worker(
@@ -648,12 +651,12 @@ mod tests {
             4,
             redis_url,
             module_path_str,
-            "default",
+            "default".to_string(),
             false,
         ));
 
         sleep(Duration::from_secs(5)).await;
-        enqueue_tasks(redis_url).await?;
+        enqueue_tasks(&cloned_redis_url).await?;
         sleep(Duration::from_secs(5)).await;
 
         let _ = shutdown_tx.send(true);

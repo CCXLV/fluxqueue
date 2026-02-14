@@ -36,16 +36,7 @@ Repository = "https://github.com/CCXLV/fluxqueue"
 Documentation = "https://fluxqueue.ccxlv.dev"
 
 [project.optional-dependencies]
-dev = [
-    "ruff",
-    "pytest-asyncio",
-    "python-dotenv",
-    "redis",
-    "mkdocs-material",
-    "mkdocstrings",
-    "mkdocstrings-python",
-    "maturin",
-]
+dev = ["ruff"]
 tests = [
     "pytest-asyncio",
     "python-dotenv",

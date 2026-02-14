@@ -70,9 +70,9 @@ async fn main() -> Result<()> {
         fluxqueue_worker::run_worker(
             shutdown_rx,
             concurrency,
-            &redis_url,
+            redis_url,
             tasks_module_path,
-            &queue,
+            queue,
             save_dead_tasks,
         )
         .await

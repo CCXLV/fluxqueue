@@ -8,8 +8,29 @@ on:
     branches:
       - main
 
+env:
+  REDIS_VERSION: 8.4.0
+
 jobs:
-  linux:
+  check-style:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e .[dev]
+      - run: scripts/check-prettier.sh
+      - run: ruff check .
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace -- -D warnings
+
+  tests-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -31,8 +52,14 @@ jobs:
 
       - run: pip install -e .[tests]
 
-      - run: scripts/check-prettier.sh
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace -- -D warnings
       - run: pytest tests/
       - run: cargo test --workspace --locked
+
+  tests-pass:
+    needs:
+      - check-style
+      - tests-linux
+    if: (github.repository_owner == 'ccxlv')
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All tests passed ✅"
