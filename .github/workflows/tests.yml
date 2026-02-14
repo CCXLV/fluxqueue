@@ -8,8 +8,25 @@ on:
     branches:
       - main
 
+env:
+  REDIS_VERSION: 8.4.0
+
 jobs:
-  linux:
+  check-style:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - run: scripts/check-prettier.sh
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace -- -D warnings
+
+  tests-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -31,12 +48,5 @@ jobs:
 
       - run: pip install -e .[tests]
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - run: scripts/check-prettier.sh
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace -- -D warnings
       - run: pytest tests/
       - run: cargo test --workspace --locked
