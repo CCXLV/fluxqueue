@@ -21,7 +21,10 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 9
-
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e .[dev]
       - run: scripts/check-prettier.sh
       - run: ruff check .
       - run: cargo fmt --all -- --check
