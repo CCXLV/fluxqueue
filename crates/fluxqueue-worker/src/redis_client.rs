@@ -138,13 +138,13 @@ impl RedisClient {
         let failed_key = keys::get_failed_key(queue_name);
 
         let task =
-            deserialize_raw_task_data(&task_bytes).context("Failed to deserialize task data")?;
+            deserialize_raw_task_data(task_bytes).context("Failed to deserialize task data")?;
 
         let now = Utc::now().timestamp() as u64;
         let backoff_seconds = (30 * 2u64.pow(task.retries as u32)).min(3600);
         let retry_at = now + backoff_seconds;
 
-        let mut cloned_task: Task = task.into();
+        let mut cloned_task: Task = task;
         cloned_task.retries += 1;
 
         let new_task_bytes =
@@ -183,7 +183,7 @@ impl RedisClient {
 
     pub async fn push_dead_task(&self, queue_name: &str, task_blob: Vec<u8>) -> Result<()> {
         let mut conn = self.redis_pool.get().await?;
-        let queue_key = keys::get_dead_key(&queue_name);
+        let queue_key = keys::get_dead_key(queue_name);
 
         let _: () = redis::cmd("LPUSH")
             .arg(queue_key)

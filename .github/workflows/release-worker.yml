@@ -10,6 +10,7 @@ env:
 
 jobs:
   linux:
+    if: (github.repository_owner == 'ccxlv')
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -53,6 +54,7 @@ jobs:
           path: dist/*
 
   release:
+    if: (github.repository_owner == 'ccxlv')
     needs: [linux]
     runs-on: ubuntu-latest
     permissions:

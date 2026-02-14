@@ -64,9 +64,9 @@ jobs:
           path: dist
 
   release:
+    if: (github.repository_owner == 'ccxlv') &&  ${{ startsWith(github.event.release.tag_name, 'v') }}
     name: Release
     runs-on: ubuntu-latest
-    if: ${{ startsWith(github.event.release.tag_name, 'v') }}
     needs: [linux, sdist]
     permissions:
       # Use to sign the release artifacts
@@ -87,5 +87,4 @@ jobs:
         with:
           subject-path: "dist/**/*"
       - name: Publish to PyPI
-        if: ${{ startsWith(github.event.release.tag_name, 'v') }}
         run: uv publish "dist/**/*"

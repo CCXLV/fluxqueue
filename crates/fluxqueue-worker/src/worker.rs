@@ -277,11 +277,11 @@ async fn run_task(
     task_function: Arc<Py<PyAny>>,
 ) -> Result<()> {
     let task_args: rmpv::Value = from_slice(&task.args).context(format!(
-        "Failed to deserialize task {} function args",
+        "Failed to deserialize task '{}' function args",
         task.name
     ))?;
     let task_kwargs: rmpv::Value = from_slice(&task.kwargs).context(format!(
-        "Failed to deserialize task {} function kwargs",
+        "Failed to deserialize task '{}' function kwargs",
         task.name
     ))?;
 
@@ -337,14 +337,17 @@ fn get_task_functions(module_path: &str, queue_name: &str) -> Result<Vec<(String
         .ancestors()
         .find(|p| p.join("tests").exists())
         .unwrap_or(&full_current_dir);
-    let real_module_path = path_to_module_path(&project_root, &clean_module_path);
+    let real_module_path = path_to_module_path(project_root, &clean_module_path);
 
     if !clean_module_path.exists() || real_module_path.is_none() {
-        tracing::error!("Tasks module path {:?} doesn't exist.", clean_module_path);
-        std::process::exit(1);
+        return Err(anyhow!(
+            "Tasks module path {:?} doesn't exist.",
+            clean_module_path
+        ));
     }
 
     let real_module_path = real_module_path.unwrap();
+    let module_dir = project_root.to_string_lossy().to_string();
 
     Python::attach(|py| {
         let module = PyModule::from_code(
@@ -358,7 +361,7 @@ fn get_task_functions(module_path: &str, queue_name: &str) -> Result<Vec<(String
         let py_funcs: Bound<'_, PyDict> = module
             .getattr("list_functions")
             .map_err(|e| anyhow!("Failed to get 'list_functions' script: {}", e))?
-            .call1((real_module_path, queue_name))
+            .call1((real_module_path, queue_name, module_dir))
             .map_err(|e| anyhow!("Failed to get tasks: {}", e))?
             .cast_into::<PyDict>()
             .map_err(|_| anyhow!("Failed to cast result to a Python Dictionary"))?;
@@ -390,7 +393,7 @@ fn normalize_path(path: &Path) -> PathBuf {
     components.iter().collect()
 }
 
-fn path_to_module_path(current_dir: &Path, target_path: &PathBuf) -> Option<String> {
+fn path_to_module_path(current_dir: &Path, target_path: &Path) -> Option<String> {
     let rel_path = target_path.strip_prefix(current_dir).ok()?;
 
     let mut components: Vec<String> = rel_path
@@ -398,10 +401,10 @@ fn path_to_module_path(current_dir: &Path, target_path: &PathBuf) -> Option<Stri
         .map(|c| c.as_os_str().to_string_lossy().to_string())
         .collect();
 
-    if let Some(last) = components.last_mut() {
-        if let Some(pos) = last.rfind('.') {
-            last.truncate(pos);
-        }
+    if let Some(last) = components.last_mut()
+        && let Some(pos) = last.rfind('.')
+    {
+        last.truncate(pos);
     }
 
     Some(components.join("."))
@@ -416,4 +419,252 @@ fn generate_executor_ids(num_executors: usize) -> Arc<Vec<Arc<str>>> {
     }
 
     Arc::new(ids)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::logger::TestWriter;
+    use std::sync::{Arc, Mutex};
+    use testcontainers::{
+        GenericImage, ImageExt,
+        core::{IntoContainerPort, WaitFor},
+        runners::AsyncRunner,
+    };
+
+    #[test]
+    fn test_path_to_module_path() -> Result<()> {
+        let current_dir = Path::new("project");
+        let tasks_path = Path::new("../project/tasks.py");
+        let normalized_path = normalize_path(tasks_path);
+        let module_path = path_to_module_path(current_dir, &normalized_path);
+
+        assert_eq!(normalized_path.to_str(), Some("project/tasks.py"));
+        assert_eq!(module_path, Some("tasks".to_string()));
+
+        Ok(())
+    }
+
+    fn get_test_module_path(filename: &str) -> String {
+        let current_dir = std::env::current_dir().unwrap();
+        let test_module_path = current_dir.join("tests").join(filename);
+        test_module_path.to_str().unwrap().to_string()
+    }
+
+    #[test]
+    fn test_get_task_functions_valid_module() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_module.py");
+        let functions = get_task_functions(&module_path_str, "default")?;
+
+        assert_eq!(functions.len(), 3);
+
+        let task_names: Vec<String> = functions.iter().map(|(name, _)| name.clone()).collect();
+        assert!(task_names.contains(&"task-1".to_string()));
+        assert!(task_names.contains(&"task-2".to_string()));
+        assert!(task_names.contains(&"async-task".to_string()));
+
+        assert!(!task_names.contains(&"high-priority-task".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_task_functions_different_queue() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_module.py");
+        let functions = get_task_functions(&module_path_str, "high-priority")?;
+
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].0, "high-priority-task");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_task_functions_empty_module() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_empty.py");
+        let functions = get_task_functions(&module_path_str, "default")?;
+
+        assert_eq!(functions.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_task_functions_duplicate_names() {
+        let module_path_str = get_test_module_path("test_tasks_duplicate.py");
+
+        let result = get_task_functions(&module_path_str, "default");
+        assert!(result.is_err());
+
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("duplicated") || error_msg.contains("duplicate"));
+    }
+
+    #[test]
+    fn test_get_task_functions_invalid_path() {
+        let result = get_task_functions("nonexistent/path/to/module.py", "default");
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_run_task_with_sync_function() -> Result<()> {
+        let task_registry = TaskRegistry::new();
+        let python_dispatcher = Arc::new(PythonDispatcher::new());
+        let module_path_str = get_test_module_path("test_tasks_module.py");
+        let task_functions = get_task_functions(&module_path_str, "default")?;
+
+        for (name, task_obj) in task_functions {
+            task_registry.insert(name, task_obj)?;
+        }
+
+        let task = task_registry.get("task-1");
+        assert!(task.is_some());
+
+        if let Some(task_func) = task {
+            let task = Task {
+                id: "test-id".to_string(),
+                name: "name".to_string(),
+                args: vec![144],   // ()
+                kwargs: vec![128], // {}
+                created_at: 0,
+                retries: 0,
+                max_retries: 3,
+            };
+
+            let result = run_task(python_dispatcher.clone(), &task, task_func).await;
+            assert!(!result.is_err());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_run_task_with_async_function() -> Result<()> {
+        let task_registry = TaskRegistry::new();
+        let python_dispatcher = Arc::new(PythonDispatcher::new());
+        let module_path_str = get_test_module_path("test_tasks_module.py");
+        let task_functions = get_task_functions(&module_path_str, "default")?;
+
+        for (name, task_obj) in task_functions {
+            task_registry.insert(name, task_obj)?;
+        }
+
+        let task = task_registry.get("async-task");
+        assert!(task.is_some());
+
+        if let Some(task_func) = task {
+            let task = Task {
+                id: "test-id".to_string(),
+                name: "name".to_string(),
+                args: vec![0x92, 0x01, 0x02], // (1, 2)
+                kwargs: vec![128],
+                created_at: 0,
+                retries: 0,
+                max_retries: 3,
+            };
+
+            let result = run_task(python_dispatcher.clone(), &task, task_func).await;
+            assert!(!result.is_err());
+        }
+
+        Ok(())
+    }
+
+    async fn enqueue_tasks(redis_url: &str) -> Result<()> {
+        use deadpool_redis::{Config, Runtime};
+        use fluxqueue_common::{
+            get_redis_connection, push_task, push_task_async, serialize_task_data,
+        };
+
+        let mut redis_conn = get_redis_connection(redis_url)?;
+
+        let sync_task = Task {
+            id: "test-id".to_string(),
+            name: "task-2".to_string(),
+            args: vec![0x92, 0x01, 0x02], // (1, 2)
+            kwargs: vec![128],
+            created_at: 0,
+            retries: 0,
+            max_retries: 3,
+        };
+        let sync_task_blob = serialize_task_data(&sync_task)?;
+
+        push_task(&mut redis_conn, "default".to_string(), sync_task_blob)?;
+
+        let async_task = Task {
+            id: "test-id-2".to_string(),
+            name: "async-task".to_string(),
+            args: vec![0x92, 0x01, 0x02], // (1, 2)
+            kwargs: vec![128],
+            created_at: 0,
+            retries: 0,
+            max_retries: 3,
+        };
+        let async_task_blob = serialize_task_data(&async_task)?;
+
+        let redis_config = Config::from_url(redis_url);
+        let redis_pool = redis_config.create_pool(Some(Runtime::Tokio1)).unwrap();
+        let mut conn_manager = redis_pool.get().await?;
+
+        push_task_async(&mut conn_manager, "default".to_string(), async_task_blob).await?;
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_run_worker() -> Result<()> {
+        use tokio::sync::watch;
+        use tokio::time::{Duration, sleep};
+
+        let logs = Arc::new(Mutex::new(Vec::new()));
+        let logs_clone = logs.clone();
+
+        let subscriber = tracing_subscriber::fmt()
+            .with_target(false)
+            .with_writer(move || TestWriter {
+                logs: logs_clone.clone(),
+            })
+            .finish();
+
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let module_path_str = get_test_module_path("test_tasks_module.py");
+        let redis_version = std::env::var("REDIS_VERSION").unwrap_or("latest".to_string());
+        let redis_url = "redis://localhost:6379";
+
+        GenericImage::new("redis", &redis_version)
+            .with_exposed_port(6379.tcp())
+            .with_wait_for(WaitFor::message_on_stdout("Ready to accept connections"))
+            .with_network("bridge")
+            .with_env_var("DEBUG", "1")
+            .start()
+            .await
+            .expect("Failed to start Redis");
+
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+
+        let worker_handle = tokio::spawn(run_worker(
+            shutdown_rx,
+            4,
+            redis_url,
+            module_path_str,
+            "default",
+            false,
+        ));
+
+        sleep(Duration::from_secs(5)).await;
+        enqueue_tasks(redis_url).await?;
+        sleep(Duration::from_secs(5)).await;
+
+        let _ = shutdown_tx.send(true);
+
+        worker_handle.await??;
+
+        let log_lines = logs.lock().unwrap();
+        let error_found = log_lines.iter().any(|line| line.contains("ERROR"));
+
+        assert!(!error_found, "Worker emitted an error log!");
+
+        Ok(())
+    }
 }

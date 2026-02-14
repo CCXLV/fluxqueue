@@ -49,6 +49,7 @@ dev = [
 tests = [
     "pytest-asyncio",
     "python-dotenv",
+    "testcontainers",
     "redis"
 ]
 cli = [
