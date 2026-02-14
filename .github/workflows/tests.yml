@@ -23,6 +23,7 @@ jobs:
           version: 9
 
       - run: scripts/check-prettier.sh
+      - run: ruff check .
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace -- -D warnings
 
