@@ -6,7 +6,8 @@
 
 **A lightweight, resource-efficient, high-throughput task queue for Python, written in Rust.**
 
-![Python versions](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-green)
+[![CI](https://github.com/ccxlv/fluxqueue/actions/workflows/tests.yml/badge.svg)](https://github.com/ccxlv/fluxqueue/actions/workflows/tests.yml)
+![Python versions](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-%2334D058)
 
 [Documentation](https://fluxqueue.ccxlv.dev) · [Benchmarks](https://github.com/CCXLV/fluxqueue-benchmarks)
 

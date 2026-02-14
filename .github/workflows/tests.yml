@@ -12,6 +12,7 @@ env:
   REDIS_VERSION: 8.4.0
 
 jobs:
+  # TODO: Add another job that will determine which tests to run based on push types and the changes that were made.
   check-style:
     runs-on: ubuntu-latest
     steps:
