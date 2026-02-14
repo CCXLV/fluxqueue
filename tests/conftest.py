@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated
@@ -7,6 +8,8 @@ from redis import Redis
 from testcontainers.redis import RedisContainer
 
 from fluxqueue import FluxQueue
+
+REDIS_VERSION = os.getenv("REDIS_VERSION") if os.getenv("REDIS_VERSION") else "latest"
 
 
 @dataclass
@@ -20,7 +23,7 @@ TestEnvFixture = Annotated[TestEnv, pytest.fixture]
 
 @pytest.fixture(scope="session")
 def redis_container() -> Iterator[RedisContainer]:
-    with RedisContainer("redis:8.4.0") as container:
+    with RedisContainer(f"redis:{REDIS_VERSION}") as container:
         yield container
 
 

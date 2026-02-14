@@ -424,6 +424,13 @@ fn generate_executor_ids(num_executors: usize) -> Arc<Vec<Arc<str>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logger::TestWriter;
+    use std::sync::{Arc, Mutex};
+    use testcontainers::{
+        GenericImage, ImageExt,
+        core::{IntoContainerPort, WaitFor},
+        runners::AsyncRunner,
+    };
 
     #[test]
     fn test_path_to_module_path() -> Result<()> {
@@ -449,7 +456,6 @@ mod tests {
         let module_path_str = get_test_module_path("test_tasks_module.py");
         let functions = get_task_functions(&module_path_str, "default")?;
 
-        // Should find task1, task2, and async_task (all have queue="default")
         assert_eq!(functions.len(), 3);
 
         let task_names: Vec<String> = functions.iter().map(|(name, _)| name.clone()).collect();
@@ -457,7 +463,6 @@ mod tests {
         assert!(task_names.contains(&"task-2".to_string()));
         assert!(task_names.contains(&"async-task".to_string()));
 
-        // Should not include high_priority_task (different queue)
         assert!(!task_names.contains(&"high-priority-task".to_string()));
 
         Ok(())
@@ -468,7 +473,6 @@ mod tests {
         let module_path_str = get_test_module_path("test_tasks_module.py");
         let functions = get_task_functions(&module_path_str, "high-priority")?;
 
-        // Should only find high_priority_task
         assert_eq!(functions.len(), 1);
         assert_eq!(functions[0].0, "high-priority-task");
 
@@ -480,7 +484,6 @@ mod tests {
         let module_path_str = get_test_module_path("test_tasks_empty.py");
         let functions = get_task_functions(&module_path_str, "default")?;
 
-        // Should find no functions
         assert_eq!(functions.len(), 0);
 
         Ok(())
@@ -490,7 +493,6 @@ mod tests {
     fn test_get_task_functions_duplicate_names() {
         let module_path_str = get_test_module_path("test_tasks_duplicate.py");
 
-        // Should error due to duplicate task names
         let result = get_task_functions(&module_path_str, "default");
         assert!(result.is_err());
 
@@ -564,6 +566,104 @@ mod tests {
             let result = run_task(python_dispatcher.clone(), &task, task_func).await;
             assert!(!result.is_err());
         }
+
+        Ok(())
+    }
+
+    async fn enqueue_tasks(redis_url: &str) -> Result<()> {
+        use deadpool_redis::{Config, Runtime};
+        use fluxqueue_common::{
+            get_redis_connection, push_task, push_task_async, serialize_task_data,
+        };
+
+        let mut redis_conn = get_redis_connection(redis_url)?;
+
+        let sync_task = Task {
+            id: "test-id".to_string(),
+            name: "task-2".to_string(),
+            args: vec![0x92, 0x01, 0x02], // (1, 2)
+            kwargs: vec![128],
+            created_at: 0,
+            retries: 0,
+            max_retries: 3,
+        };
+        let sync_task_blob = serialize_task_data(&sync_task)?;
+
+        push_task(&mut redis_conn, "default".to_string(), sync_task_blob)?;
+
+        let async_task = Task {
+            id: "test-id-2".to_string(),
+            name: "async-task".to_string(),
+            args: vec![0x92, 0x01, 0x02], // (1, 2)
+            kwargs: vec![128],
+            created_at: 0,
+            retries: 0,
+            max_retries: 3,
+        };
+        let async_task_blob = serialize_task_data(&async_task)?;
+
+        let redis_config = Config::from_url(redis_url);
+        let redis_pool = redis_config.create_pool(Some(Runtime::Tokio1)).unwrap();
+        let mut conn_manager = redis_pool.get().await?;
+
+        push_task_async(&mut conn_manager, "default".to_string(), async_task_blob).await?;
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_run_worker() -> Result<()> {
+        use tokio::sync::watch;
+        use tokio::time::{Duration, sleep};
+
+        let logs = Arc::new(Mutex::new(Vec::new()));
+        let logs_clone = logs.clone();
+
+        let subscriber = tracing_subscriber::fmt()
+            .with_target(false)
+            .with_writer(move || TestWriter {
+                logs: logs_clone.clone(),
+            })
+            .finish();
+
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let module_path_str = get_test_module_path("test_tasks_module.py");
+        let redis_version = std::env::var("REDIS_VERSION").unwrap_or("latest".to_string());
+        let redis_url = "redis://localhost:6379";
+
+        GenericImage::new("redis", &redis_version)
+            .with_exposed_port(6379.tcp())
+            .with_wait_for(WaitFor::message_on_stdout("Ready to accept connections"))
+            .with_network("bridge")
+            .with_env_var("DEBUG", "1")
+            .start()
+            .await
+            .expect("Failed to start Redis");
+
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+
+        let worker_handle = tokio::spawn(run_worker(
+            shutdown_rx,
+            4,
+            redis_url,
+            module_path_str,
+            "default",
+            false,
+        ));
+
+        sleep(Duration::from_secs(5)).await;
+        enqueue_tasks(redis_url).await?;
+        sleep(Duration::from_secs(5)).await;
+
+        let _ = shutdown_tx.send(true);
+
+        worker_handle.await??;
+
+        let log_lines = logs.lock().unwrap();
+        let error_found = log_lines.iter().any(|line| line.contains("ERROR"));
+
+        assert!(!error_found, "Worker emitted an error log!");
 
         Ok(())
     }

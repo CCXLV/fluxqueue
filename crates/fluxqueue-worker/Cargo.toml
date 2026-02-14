@@ -35,3 +35,6 @@ chrono = "0.4.43"
 num_cpus = "1.17.0"
 
 fluxqueue-common.workspace = true
+
+[dev-dependencies]
+testcontainers = "0.27.0"

@@ -1,4 +1,8 @@
 use std::fmt::Arguments;
+#[cfg(test)]
+use std::io::{self, Write};
+#[cfg(test)]
+use std::sync::{Arc, Mutex};
 use tracing::{error, info, warn};
 
 pub struct Logger {
@@ -38,4 +42,22 @@ pub fn initial_logs(
     info!("Tasks module: {}", tasks_module_path);
     info!("Tasks found: {:?}", tasks);
     info!("{}", "-".repeat(65));
+}
+
+#[cfg(test)]
+pub struct TestWriter {
+    pub logs: Arc<Mutex<Vec<String>>>,
+}
+
+#[cfg(test)]
+impl Write for TestWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let line = String::from_utf8_lossy(buf).to_string();
+        self.logs.lock().unwrap().push(line);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
