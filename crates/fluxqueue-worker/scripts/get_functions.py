@@ -1,8 +1,15 @@
 import importlib
 import inspect
+import sys
+from pathlib import Path
 
 
-def list_functions(module_path: str, queue: str):
+def list_functions(module_path: str, queue: str, module_dir: str | None = None):
+    if module_dir:
+        module_dir_path = Path(module_dir).resolve()
+        if str(module_dir_path) not in sys.path:
+            sys.path.insert(0, str(module_dir_path))
+
     module = importlib.import_module(module_path)
     funcs = {}
     for _name, obj in inspect.getmembers(module):

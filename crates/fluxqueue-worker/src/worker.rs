@@ -277,11 +277,11 @@ async fn run_task(
     task_function: Arc<Py<PyAny>>,
 ) -> Result<()> {
     let task_args: rmpv::Value = from_slice(&task.args).context(format!(
-        "Failed to deserialize task {} function args",
+        "Failed to deserialize task '{}' function args",
         task.name
     ))?;
     let task_kwargs: rmpv::Value = from_slice(&task.kwargs).context(format!(
-        "Failed to deserialize task {} function kwargs",
+        "Failed to deserialize task '{}' function kwargs",
         task.name
     ))?;
 
@@ -340,11 +340,14 @@ fn get_task_functions(module_path: &str, queue_name: &str) -> Result<Vec<(String
     let real_module_path = path_to_module_path(&project_root, &clean_module_path);
 
     if !clean_module_path.exists() || real_module_path.is_none() {
-        tracing::error!("Tasks module path {:?} doesn't exist.", clean_module_path);
-        std::process::exit(1);
+        return Err(anyhow!(
+            "Tasks module path {:?} doesn't exist.",
+            clean_module_path
+        ));
     }
 
     let real_module_path = real_module_path.unwrap();
+    let module_dir = project_root.to_string_lossy().to_string();
 
     Python::attach(|py| {
         let module = PyModule::from_code(
@@ -358,7 +361,7 @@ fn get_task_functions(module_path: &str, queue_name: &str) -> Result<Vec<(String
         let py_funcs: Bound<'_, PyDict> = module
             .getattr("list_functions")
             .map_err(|e| anyhow!("Failed to get 'list_functions' script: {}", e))?
-            .call1((real_module_path, queue_name))
+            .call1((real_module_path, queue_name, module_dir))
             .map_err(|e| anyhow!("Failed to get tasks: {}", e))?
             .cast_into::<PyDict>()
             .map_err(|_| anyhow!("Failed to cast result to a Python Dictionary"))?;
@@ -416,4 +419,152 @@ fn generate_executor_ids(num_executors: usize) -> Arc<Vec<Arc<str>>> {
     }
 
     Arc::new(ids)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_path_to_module_path() -> Result<()> {
+        let current_dir = Path::new("project");
+        let tasks_path = Path::new("../project/tasks.py");
+        let normalized_path = normalize_path(tasks_path);
+        let module_path = path_to_module_path(current_dir, &normalized_path);
+
+        assert_eq!(normalized_path.to_str(), Some("project/tasks.py"));
+        assert_eq!(module_path, Some("tasks".to_string()));
+
+        Ok(())
+    }
+
+    fn get_test_module_path(filename: &str) -> String {
+        let current_dir = std::env::current_dir().unwrap();
+        let test_module_path = current_dir.join("tests").join(filename);
+        test_module_path.to_str().unwrap().to_string()
+    }
+
+    #[test]
+    fn test_get_task_functions_valid_module() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_module.py");
+        let functions = get_task_functions(&module_path_str, "default")?;
+
+        // Should find task1, task2, and async_task (all have queue="default")
+        assert_eq!(functions.len(), 3);
+
+        let task_names: Vec<String> = functions.iter().map(|(name, _)| name.clone()).collect();
+        assert!(task_names.contains(&"task-1".to_string()));
+        assert!(task_names.contains(&"task-2".to_string()));
+        assert!(task_names.contains(&"async-task".to_string()));
+
+        // Should not include high_priority_task (different queue)
+        assert!(!task_names.contains(&"high-priority-task".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_task_functions_different_queue() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_module.py");
+        let functions = get_task_functions(&module_path_str, "high-priority")?;
+
+        // Should only find high_priority_task
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].0, "high-priority-task");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_task_functions_empty_module() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_empty.py");
+        let functions = get_task_functions(&module_path_str, "default")?;
+
+        // Should find no functions
+        assert_eq!(functions.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_task_functions_duplicate_names() {
+        let module_path_str = get_test_module_path("test_tasks_duplicate.py");
+
+        // Should error due to duplicate task names
+        let result = get_task_functions(&module_path_str, "default");
+        assert!(result.is_err());
+
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("duplicated") || error_msg.contains("duplicate"));
+    }
+
+    #[test]
+    fn test_get_task_functions_invalid_path() {
+        let result = get_task_functions("nonexistent/path/to/module.py", "default");
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_run_task_with_sync_function() -> Result<()> {
+        let task_registry = TaskRegistry::new();
+        let python_dispatcher = Arc::new(PythonDispatcher::new());
+        let module_path_str = get_test_module_path("test_tasks_module.py");
+        let task_functions = get_task_functions(&module_path_str, "default")?;
+
+        for (name, task_obj) in task_functions {
+            task_registry.insert(name, task_obj)?;
+        }
+
+        let task = task_registry.get("task-1");
+        assert!(task.is_some());
+
+        if let Some(task_func) = task {
+            let task = Task {
+                id: "test-id".to_string(),
+                name: "name".to_string(),
+                args: vec![144],   // ()
+                kwargs: vec![128], // {}
+                created_at: 0,
+                retries: 0,
+                max_retries: 3,
+            };
+
+            let result = run_task(python_dispatcher.clone(), &task, task_func).await;
+            assert!(!result.is_err());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_run_task_with_async_function() -> Result<()> {
+        let task_registry = TaskRegistry::new();
+        let python_dispatcher = Arc::new(PythonDispatcher::new());
+        let module_path_str = get_test_module_path("test_tasks_module.py");
+        let task_functions = get_task_functions(&module_path_str, "default")?;
+
+        for (name, task_obj) in task_functions {
+            task_registry.insert(name, task_obj)?;
+        }
+
+        let task = task_registry.get("async-task");
+        assert!(task.is_some());
+
+        if let Some(task_func) = task {
+            let task = Task {
+                id: "test-id".to_string(),
+                name: "name".to_string(),
+                args: vec![0x92, 0x01, 0x02], // (1, 2)
+                kwargs: vec![128],
+                created_at: 0,
+                retries: 0,
+                max_retries: 3,
+            };
+
+            let result = run_task(python_dispatcher.clone(), &task, task_func).await;
+            assert!(!result.is_err());
+        }
+
+        Ok(())
+    }
 }
