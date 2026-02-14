@@ -54,3 +54,12 @@ jobs:
 
       - run: pytest tests/
       - run: cargo test --workspace --locked
+
+  tests-pass:
+    needs:
+      - check-style
+      - tests-linux
+    if: (github.repository_owner == 'ccxlv')
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All tests passed ✅"
