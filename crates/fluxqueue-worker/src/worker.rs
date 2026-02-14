@@ -640,7 +640,7 @@ mod tests {
             .await
             .expect("Failed to start Redis");
 
-        let mapped_port = container.get_host_port_ipv4(6379).await;
+        let mapped_port = container.get_host_port_ipv4(6379).await?;
         let redis_url = format!("redis://localhost:{:?}", mapped_port);
         let cloned_redis_url = redis_url.clone();
 
