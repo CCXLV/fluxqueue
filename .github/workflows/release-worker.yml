@@ -24,7 +24,6 @@ jobs:
       && startsWith(github.event.workflow_run.head_branch, 'worker-v')
     name: ${{ matrix.os }} (Py ${{ matrix.python-version }})
     strategy:
-      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
         include:
