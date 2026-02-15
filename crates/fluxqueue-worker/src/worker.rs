@@ -438,8 +438,9 @@ mod tests {
         let tasks_path = Path::new("../project/tasks.py");
         let normalized_path = normalize_path(tasks_path);
         let module_path = path_to_module_path(current_dir, &normalized_path);
+        let expected_path = Path::new("project/tasks.py");
 
-        assert_eq!(normalized_path.to_str(), Some("project/tasks.py"));
+        assert_eq!(normalized_path, expected_path);
         assert_eq!(module_path, Some("tasks".to_string()));
 
         Ok(())
