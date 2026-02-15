@@ -18,10 +18,7 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
   build:
-    if: >
-      github.repository_owner == 'ccxlv'
-      && github.event.workflow_run.conclusion == 'success' 
-      && startsWith(github.event.workflow_run.head_branch, 'worker-v')
+    if: github.repository_owner == 'ccxlv' && startsWith(github.event.workflow_run.head_branch, 'worker-v')
     name: ${{ matrix.os }} (Py ${{ matrix.python-version }})
     strategy:
       matrix:
@@ -45,10 +42,7 @@ jobs:
           target: ${{ matrix.target }}
 
   release:
-    if: >
-      github.repository_owner == 'ccxlv'
-      && github.event.workflow_run.conclusion == 'success' 
-      && startsWith(github.event.workflow_run.head_branch, 'worker-v')
+    if: github.repository_owner == 'ccxlv' && startsWith(github.event.workflow_run.head_branch, 'worker-v')
     needs: [build]
     runs-on: ubuntu-latest
     permissions:
