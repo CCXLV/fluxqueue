@@ -1,0 +1,63 @@
+name: "Build Worker"
+description: "Build worker"
+inputs:
+  python-version:
+    description: "Python version to use"
+    required: true
+  target:
+    description: "Target that is the worker is built for"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust
+      uses: Swatinem/rust-cache@v2
+
+    - name: Build
+      shell: bash -euxo pipefail {0}
+      run: scripts/build-worker.sh ${{ inputs.target }}
+
+    - name: Package the worker (Linux)
+      if: runner.os == 'Linux'
+      shell: bash -euxo pipefail {0}
+      run: |
+        cd dist
+        mv fluxqueue-worker-${{ inputs.target }} fluxqueue-worker
+        tar -czvf fluxqueue-${{ github.ref_name }}-py${{ inputs.python-version }}-linux-x86_64.tar.gz fluxqueue-worker
+        rm fluxqueue-worker
+
+    - name: Package the worker (macOS)
+      if: runner.os == 'macOS'
+      shell: bash -euxo pipefail {0}
+      run: |
+        cd dist
+        mv fluxqueue-worker-${{ inputs.target }} fluxqueue-worker
+        zip fluxqueue-${{ github.ref_name }}-py${{ inputs.python-version }}-${{ inputs.target }}.zip fluxqueue-worker
+        rm fluxqueue-worker
+
+    - name: Package the worker (Windows)
+      if: runner.os == 'Windows'
+      shell: bash -euxo pipefail {0}
+      run: |
+        cd dist
+        mv fluxqueue-worker-${{ inputs.target }}.exe fluxqueue-worker.exe
+        zip fluxqueue-${{ github.ref_name }}-py${{ inputs.python-version }}-windows-x86_64.zip fluxqueue-worker.exe
+        rm fluxqueue-worker.exe
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: fluxqueue-worker-${{ inputs.target }}-py${{ inputs.python-version }}
+        path: dist/*

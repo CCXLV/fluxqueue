@@ -3,14 +3,7 @@ name: Release Worker
 on:
   workflow_run:
     workflows: ["Tests"]
-    types:
-      - completed
-
-env:
-  LINUX_TARGET: x86_64-unknown-linux-gnu
-  WINDOWS_TARGET: x86_64-pc-windows-msvc
-  MACOS_TARGET_x86_64: x86_64-apple-darwin
-  MACOS_TARET_aarch64: aarch64-apple-darwin
+    types: [completed]
 
 jobs:
   check-main:
@@ -24,150 +17,40 @@ jobs:
           git fetch origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
-  linux:
+  build:
     if: >
       github.repository_owner == 'ccxlv'
       && github.event.workflow_run.conclusion == 'success' 
       && startsWith(github.event.workflow_run.head_branch, 'worker-v')
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} (Py ${{ matrix.python-version }})
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - name: Run Build Suite
+        uses: ./.github/actions/build-worker
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-      - name: Build
-        run: scripts/build-worker.sh ${{ env.LINUX_TARGET }}
-      - name: Package the worker
-        run: |
-          cd dist
-          mv fluxqueue-worker-${{ env.LINUX_TARGET }} fluxqueue-worker
-          tar -czvf fluxqueue-${{ github.ref_name }}-py${{ matrix.python-version }}-linux-x86_64.tar.gz fluxqueue-worker
-          rm fluxqueue-worker
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fluxqueue-worker-linux-py${{ matrix.python-version }}
-          path: dist/*
-
-  windows:
-    if: >
-      github.repository_owner == 'ccxlv'
-      && github.event.workflow_run.conclusion == 'success' 
-      && startsWith(github.event.workflow_run.head_branch, 'worker-v')
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-      - name: Build
-        run: scripts/build-worker.sh ${{ env.WINDOWS_TARGET }}
-      - name: Prepare the worker
-        shell: bash
-        run: |
-          cd dist
-          mv fluxqueue-worker-${{ env.WINDOWS_TARGET }}.exe fluxqueue-worker.exe
-          zip fluxqueue-${{ github.ref_name }}-py${{ matrix.python-version }}-windows-x86_64.zip fluxqueue-worker.exe
-          rm fluxqueue-worker.exe
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fluxqueue-worker-windows-py${{ matrix.python-version }}
-          path: dist/*
-
-  macos-x86_64:
-    if: >
-      github.repository_owner == 'ccxlv'
-      && github.event.workflow_run.conclusion == 'success' 
-      && startsWith(github.event.workflow_run.head_branch, 'worker-v')
-    runs-on: macos-15-intel
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-      - name: Build
-        run: scripts/build-worker.sh ${{ env.MACOS_TARGET_x86_64 }}
-      - name: Package the worker
-        run: |
-          cd dist
-          mv fluxqueue-worker-${{ env.MACOS_TARGET_x86_64 }} fluxqueue-worker
-          zip fluxqueue-${{ github.ref_name }}-py${{ matrix.python-version }}-macos-x86_64.zip fluxqueue-worker
-          rm fluxqueue-worker
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fluxqueue-worker-macos-x86_64-py${{ matrix.python-version }}
-          path: dist/*
-
-  macos-aarch64:
-    if: >
-      github.repository_owner == 'ccxlv'
-      && github.event.workflow_run.conclusion == 'success' 
-      && startsWith(github.event.workflow_run.head_branch, 'worker-v')
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        arch: [aarch64]
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-      - name: Build
-        run: scripts/build-worker.sh ${{ env.MACOS_TARET_aarch64 }}
-      - name: Package the worker
-        run: |
-          cd dist
-          mv fluxqueue-worker-${{ env.MACOS_TARET_aarch64 }} fluxqueue-worker
-          zip fluxqueue-${{ github.ref_name }}-py${{ matrix.python-version }}-macos-aarch64.zip fluxqueue-worker
-          rm fluxqueue-worker
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fluxqueue-worker-macos-aarch64-py${{ matrix.python-version }}
-          path: dist/*
+          target: ${{ matrix.target }}
 
   release:
     if: >
       github.repository_owner == 'ccxlv'
       && github.event.workflow_run.conclusion == 'success' 
       && startsWith(github.event.workflow_run.head_branch, 'worker-v')
-    needs: [linux, windows, macos-x86_64, macos-aarch64]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -184,5 +67,5 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           files: artifacts/**/*
-          draft: false
+          draft: true
           prerelease: false
