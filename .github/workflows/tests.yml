@@ -34,11 +34,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15-arm64, macos-15-intel]
+        os: [ubuntu-latest, macos-latest, macos-15-intel]
         python-version: ["3.11", "3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        
+      - name: Chech arch
+        if: runner.os == 'macOS'
+        run: uname -m
 
       - name: Install Redis (Linux)
         if: runner.os == 'Linux'
