@@ -39,14 +39,14 @@ runs:
 
     - name: Build
       shell: bash -euxo pipefail {0}
-      run: scripts/build-worker.sh ${{ steps.target.outputs.target }}
+      run: scripts/build-worker.sh ${{ env.TARGET }}
 
     - name: Package the worker (Linux)
       if: runner.os == 'Linux'
       shell: bash -euxo pipefail {0}
       run: |
         cd dist
-        mv fluxqueue-worker-${{ steps.target.outputs.target }} fluxqueue-worker
+        mv fluxqueue-worker-${{ env.TARGET }} fluxqueue-worker
         tar -czvf fluxqueue-${{ github.ref_name }}-py${{ inputs.python-version }}-linux-x86_64.tar.gz fluxqueue-worker
         rm fluxqueue-worker
 
@@ -55,8 +55,8 @@ runs:
       shell: bash -euxo pipefail {0}
       run: |
         cd dist
-        mv fluxqueue-worker-${{ steps.target.outputs.target }} fluxqueue-worker
-        zip fluxqueue-${{ github.ref_name }}-py${{ inputs.python-version }}-${{ steps.target.outputs.target }}.zip fluxqueue-worker
+        mv fluxqueue-worker-${{ env.TARGET }} fluxqueue-worker
+        zip fluxqueue-${{ github.ref_name }}-py${{ inputs.python-version }}-${{ env.TARGET }}.zip fluxqueue-worker
         rm fluxqueue-worker
 
     - name: Package the worker (Windows)
@@ -64,12 +64,12 @@ runs:
       shell: pwsh
       run: |
         cd dist
-        mv fluxqueue-worker-${{ steps.target.outputs.target }}.exe fluxqueue-worker.exe
+        mv fluxqueue-worker-${{ env.TARGET }}.exe fluxqueue-worker.exe
         Compress-Archive -Path fluxqueue-worker.exe -DestinationPath fluxqueue-${{ github.ref_name }}-py${{ inputs.python-version }}-windows-x86_64.zip 
         rm fluxqueue-worker.exe
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
-        name: fluxqueue-worker-${{ steps.target.outputs.target }}-py${{ inputs.python-version }}
+        name: fluxqueue-worker-${{ env.TARGET }}-py${{ inputs.python-version }}
         path: dist/*
