@@ -10,6 +10,7 @@ on:
 
 env:
   REDIS_VERSION: 8.4.0
+  PYTHON_VERSIONS: '["3.11","3.12","3.13","3.14"]'
 
 jobs:
   # TODO: Add another job that will determine which tests to run based on push types and the changes that were made.
@@ -35,24 +36,54 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
-
+        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-
       - run: python -m pip install --upgrade pip
-
       - uses: dtolnay/rust-toolchain@stable
-
       - uses: Swatinem/rust-cache@v2
-
       - run: pip install -e .[tests]
+      - run: pytest tests/
+      - run: cargo test --workspace --locked
 
+  tests-macos-x86_64:
+    runs-on: macos-15-intel
+    strategy:
+      matrix:
+        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: pip install -e .[tests]
+      - run: pytest tests/
+      - run: cargo test --workspace --locked
+
+  tests-macos-aarch64:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [aarch64]
+        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: pip install -e .[tests]
       - run: pytest tests/
       - run: cargo test --workspace --locked
 
@@ -60,6 +91,8 @@ jobs:
     needs:
       - check-style
       - tests-linux
+      - tests-macos-x86_64
+      - tests-macos-aarch64
     if: (github.repository_owner == 'ccxlv')
     runs-on: ubuntu-latest
     steps:

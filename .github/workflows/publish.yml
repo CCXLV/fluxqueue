@@ -12,43 +12,105 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHON_VERSIONS: '["3.11","3.12","3.13","3.14"]'
+
 jobs:
   linux:
-    runs-on: ${{ matrix.platform.runner }}
+    if: github.repository_owner == 'ccxlv' && startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        platform:
-          - runner: ubuntu-22.04
-            target: x86_64
-          - runner: ubuntu-22.04
-            target: x86
-          - runner: ubuntu-22.04
-            target: aarch64
-          - runner: ubuntu-22.04
-            target: armv7
-          - runner: ubuntu-22.04
-            target: s390x
-          - runner: ubuntu-22.04
-            target: ppc64le
+        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.x
+          python-version: ${{ matrix.python-version }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.platform.target }}
+          target: x86_64-unknown-linux-gnu
           args: --release --out dist --find-interpreter
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          manylinux: auto
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-linux-${{ matrix.platform.target }}
+          name: wheels-linux-x86_64
+          path: dist
+
+  windows:
+    if: github.repository_owner == 'ccxlv' && startsWith(github.event.release.tag_name, 'v')
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-pc-windows-msvc
+          args: --release --out dist --find-interpreter
+          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Upload wheels
+        uses: actions/upload-artifact@v5
+        with:
+          name: wheels-windows-x64
+          path: dist
+
+  macos-x86_64:
+    if: github.repository_owner == 'ccxlv' && startsWith(github.event.release.tag_name, 'v')
+    runs-on: macos-15-intel
+    strategy:
+      matrix:
+        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-apple-darwin
+          args: --release --out dist --find-interpreter
+          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Upload wheels
+        uses: actions/upload-artifact@v5
+        with:
+          name: wheels-macos-x86_64-apple-darwin
+          path: dist
+
+  macos-aarch64:
+    if: github.repository_owner == 'ccxlv' && startsWith(github.event.release.tag_name, 'v')
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [aarch64]
+        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.arch }}-apple-darwin
+          args: --release --out dist --find-interpreter
+          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Upload wheels
+        uses: actions/upload-artifact@v5
+        with:
+          name: wheels-macos-${{ matrix.arch }}-apple-darwin
           path: dist
 
   sdist:
+    if: github.repository_owner == 'ccxlv' && startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +129,7 @@ jobs:
     if: (github.repository_owner == 'ccxlv') &&  ${{ startsWith(github.event.release.tag_name, 'v') }}
     name: Release
     runs-on: ubuntu-latest
-    needs: [linux, sdist]
+    needs: [linux, windows, macos-x86_64, macos-aarch64, sdist]
     permissions:
       # Use to sign the release artifacts
       id-token: write
