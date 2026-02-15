@@ -18,16 +18,8 @@ jobs:
     name: ${{ matrix.os }} (Py ${{ matrix.python-version }})
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
         python-version: ["3.11", "3.12", "3.13", "3.14"]
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-          - os: macos-latest
-            target: aarch64-apple-darwin
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +27,6 @@ jobs:
         uses: ./.github/actions/build-package
         with:
           python-version: ${{ matrix.python-version }}
-          target: ${{ matrix.target }}
 
   sdist:
     if: github.repository_owner == 'ccxlv' && startsWith(github.event.release.tag_name, 'v')
