@@ -426,11 +426,6 @@ mod tests {
     use super::*;
     use crate::logger::TestWriter;
     use std::sync::{Arc, Mutex};
-    use testcontainers::{
-        GenericImage, ImageExt,
-        core::{IntoContainerPort, WaitFor},
-        runners::AsyncRunner,
-    };
 
     #[test]
     fn test_path_to_module_path() -> Result<()> {
@@ -630,34 +625,21 @@ mod tests {
         let _guard = tracing::subscriber::set_default(subscriber);
 
         let module_path_str = get_test_module_path("test_tasks_module.py");
-        let redis_version = std::env::var("REDIS_VERSION").unwrap_or("latest".to_string());
-
-        let container = GenericImage::new("redis", &redis_version)
-            .with_exposed_port(6379.tcp())
-            .with_wait_for(WaitFor::message_on_stdout("Ready to accept connections"))
-            .with_network("bridge")
-            .with_env_var("DEBUG", "1")
-            .start()
-            .await
-            .expect("Failed to start Redis");
-
-        let mapped_port = container.get_host_port_ipv4(6379).await?;
-        let redis_url = format!("redis://localhost:{:?}", mapped_port);
-        let cloned_redis_url = redis_url.clone();
+        let redis_url = "redis://localhost:6379";
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
         let worker_handle = tokio::spawn(run_worker(
             shutdown_rx,
             4,
-            redis_url,
+            redis_url.to_string(),
             module_path_str,
             "default".to_string(),
             false,
         ));
 
         sleep(Duration::from_secs(5)).await;
-        enqueue_tasks(&cloned_redis_url).await?;
+        enqueue_tasks(&redis_url).await?;
         sleep(Duration::from_secs(5)).await;
 
         let _ = shutdown_tx.send(true);

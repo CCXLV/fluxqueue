@@ -1,61 +1,55 @@
 name: Release Worker
 
 on:
-  push:
-    tags:
-      - worker-v*
-
-env:
-  LINUX_TARGET: x86_64-unknown-linux-gnu
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
 
 jobs:
-  linux:
-    if: (github.repository_owner == 'ccxlv')
+  check-main:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
       - name: Ensure tag is on main
         run: |
           git fetch origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+  build:
+    if: >
+      github.repository_owner == 'ccxlv'
+      && github.event.workflow_run.conclusion == 'success' 
+      && startsWith(github.event.workflow_run.head_branch, 'worker-v')
+    name: ${{ matrix.os }} (Py ${{ matrix.python-version }})
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Build Suite
+        uses: ./.github/actions/build-worker
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build
-        run: scripts/build-worker.sh ${{ env.LINUX_TARGET }}
-
-      - name: Package the worker
-        run: |
-          cd dist
-          mv fluxqueue-worker-${{ env.LINUX_TARGET }} fluxqueue-worker
-          tar -czvf fluxqueue-${{ github.ref_name }}-py${{ matrix.python-version }}-linux-x86_64.tar.gz fluxqueue-worker
-          rm fluxqueue-worker
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fluxqueue-worker-linux-py${{ matrix.python-version }}
-          path: dist/*
+          target: ${{ matrix.target }}
 
   release:
-    if: (github.repository_owner == 'ccxlv')
-    needs: [linux]
+    if: >
+      github.repository_owner == 'ccxlv'
+      && github.event.workflow_run.conclusion == 'success' 
+      && startsWith(github.event.workflow_run.head_branch, 'worker-v')
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -72,5 +66,5 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           files: artifacts/**/*
-          draft: false
+          draft: true
           prerelease: false
