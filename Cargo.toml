@@ -1,6 +1,12 @@
 [workspace]
 members = ["crates/fluxqueue-common", "crates/fluxqueue-worker"]
 
+[workspace.package]
+repository = "https://github.com/CCXLV/fluxqueue"
+homepage = "https://fluxqueue.ccxlv.dev/"
+authors = ["Giorgi Merebashvili <mereba2627@gmail.com>"]
+edition = "2024"
+
 [package]
 name = "fluxqueue_core"
 version = "0.2.0-beta.1"

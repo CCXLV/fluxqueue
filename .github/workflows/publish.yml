@@ -12,16 +12,13 @@ on:
 permissions:
   contents: read
 
-env:
-  PYTHON_VERSIONS: '["3.11","3.12","3.13","3.14"]'
-
 jobs:
   linux:
     if: github.repository_owner == 'ccxlv' && startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,7 +41,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -67,7 +64,7 @@ jobs:
     runs-on: macos-15-intel
     strategy:
       matrix:
-        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -91,7 +88,7 @@ jobs:
     strategy:
       matrix:
         arch: [aarch64]
-        python-version: ${{ fromJSON(env.PYTHON_VERSIONS) }}
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6

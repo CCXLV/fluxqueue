@@ -40,7 +40,6 @@ dev = ["ruff"]
 tests = [
     "pytest-asyncio",
     "python-dotenv",
-    "testcontainers",
     "redis"
 ]
 cli = [
