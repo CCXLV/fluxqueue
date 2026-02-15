@@ -42,7 +42,22 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
+      - name: Install Redis (macOS)
+        if: runner.os == 'macOS'
+        shell: bash -euxo pipefail {0}
+        run: |
+          # Extract major version (e.g., 8.4.0 -> 8)
+          MAJOR_VERSION=$(echo "${{ env.REDIS_VERSION }}" | cut -d. -f1)
+          
+          # Check if a specific versioned formula exists, otherwise use latest
+          if brew info "redis@$MAJOR_VERSION" >/dev/null 2>&1; then
+            brew install "redis@$MAJOR_VERSION"
+            brew services start "redis@$MAJOR_VERSION"
+            echo "$(brew --prefix "redis@$MAJOR_VERSION")/bin" >> $GITHUB_PATH
+          else
+            brew install redis
+            brew services start redis
+          fi
       - name: Run Test Suite
         uses: ./.github/actions/tests
         with:
