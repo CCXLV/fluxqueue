@@ -3,7 +3,7 @@ members = ["crates/fluxqueue-common", "crates/fluxqueue-worker"]
 
 [workspace.package]
 repository = "https://github.com/CCXLV/fluxqueue"
-homepage = "https://fluxqueue.ccxlv.dev/"
+homepage = "https://fluxqueue.ccxlv.dev"
 authors = ["Giorgi Merebashvili <mereba2627@gmail.com>"]
 edition = "2024"
 
