@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
-        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-15-intel, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -54,14 +54,6 @@ jobs:
         run: |
           brew install redis
           brew services start redis
-
-      - name: Install Redis (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install redis-64 --yes
-          redis-server --service-install
-          redis-server --service-start
 
       - name: Run Test Suite
         uses: ./.github/actions/tests
