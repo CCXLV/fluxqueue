@@ -4,9 +4,6 @@ inputs:
   python-version:
     description: "Python version"
     required: true
-  target:
-    description: "Target to build the package for"
-    required: true
 
 runs:
   using: composite
@@ -15,14 +12,28 @@ runs:
     - uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
+    - name: Set target based on OS and arch
+      shell: bash
+      run: |
+        if [[ "${RUNNER_OS}" == "Linux" ]]; then
+          echo "TARGET=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+        elif [[ "${RUNNER_OS}" == "macOS" ]]; then
+          if [[ "${RUNNER_ARCH}" == "ARM64" ]]; then
+            echo "TARGET=aarch64-apple-darwin" >> $GITHUB_ENV
+          else
+            echo "TARGET=x86_64-apple-darwin" >> $GITHUB_ENV
+          fi
+        elif [[ "${RUNNER_OS}" == "Windows" ]]; then
+          echo "TARGET=x86_64-pc-windows-msvc" >> $GITHUB_ENV
+        fi
     - name: Build wheels
       uses: PyO3/maturin-action@v1
       with:
-        target: ${{ inputs.target }}
+        target: ${{ steps.target.outputs.target }}
         args: --release --out dist --find-interpreter
         sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
     - name: Upload wheels
       uses: actions/upload-artifact@v4
       with:
-        name: wheels-${{ inputs.target }}
+        name: wheels-${{ steps.target.outputs.target }}
         path: dist
