@@ -45,7 +45,7 @@ jobs:
           path: dist
 
   release:
-    if: (github.repository_owner == 'ccxlv') &&  ${{ startsWith(github.event.release.tag_name, 'v') }}
+    if: github.repository_owner == 'ccxlv' && startsWith(github.event.release.tag_name, 'v')
     name: Release
     runs-on: ubuntu-latest
     needs: [build, sdist]
