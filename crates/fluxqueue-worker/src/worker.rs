@@ -58,7 +58,6 @@ pub async fn run_worker(
         let executor_id = Arc::clone(&executor_ids[i]);
         let shutdown = shutdown.clone();
         let task_registry = Arc::clone(&task_registry);
-        // TODO: Add a way to let the user choose between having 1 event loop per tokio task or just a single event loop in a worker.
         let python_dispatcher = Arc::new(PythonDispatcher::new());
 
         redis_client
