@@ -32,9 +32,8 @@ FluxQueue is a task queue for Python that gets out of your way. The Rust core ma
 
 ## Requirements
 
-- Python 3.11, 3.12, 3.13 or 3,14
+- Python 3.11, 3.12, 3.13 or 3.14
 - Redis server
-- Linux (Windows and macOS support coming soon)
 
 ## Installation
 
