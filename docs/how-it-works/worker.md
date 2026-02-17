@@ -49,7 +49,7 @@ This design lets you freely mix sync and async Python task functions while keepi
 
 ## Python Dispatcher
 
-The Python dispatcher is a small component that owns a dedicated Python event loop and hides the complexity of driving async Python code from Rust. Internally, it:
+The Python dispatcher is a small component that runs in each `tokio` task, it owns a dedicated Python event loop and hides the complexity of driving async Python code from Rust. Internally, it:
 
 - Runs a background thread that initializes Python and starts a Tokio runtime bound to the Python interpreter.
 - Listens on an internal channel for incoming Python coroutine objects sent by executor loops.
