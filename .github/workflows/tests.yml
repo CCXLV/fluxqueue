@@ -27,11 +27,12 @@ jobs:
       - run: |
           uv sync --extra dev
           scripts/check-prettier.sh
-          ruff check .
+          uv run ruff check .
           cargo fmt --all -- --check
           cargo clippy --workspace -- -D warnings
 
   tests:
+    needs: [check-style]
     name: ${{ matrix.os }} (Py ${{ matrix.python-version }})
     strategy:
       fail-fast: false

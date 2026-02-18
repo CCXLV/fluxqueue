@@ -12,7 +12,7 @@ runs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
-        
+
     - name: Install uv
       uses: astral-sh/setup-uv@v7
 
@@ -29,5 +29,5 @@ runs:
     - name: Run Tests
       shell: bash -euxo pipefail {0}
       run: |
-        pytest tests/
+        uv run pytest tests/
         cargo test --workspace --locked
