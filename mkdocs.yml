@@ -70,6 +70,11 @@ nav:
       - how-it-works/index.md
       - how-it-works/client.md
       - how-it-works/worker.md
+  - Examples:
+      - examples/index.md
+      - examples/flask.md
+      - examples/django.md
+      - examples/fastapi.md
   - API Reference:
       - api/index.md
       - api/fluxqueue.md
