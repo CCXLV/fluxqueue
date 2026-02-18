@@ -1,13 +1,9 @@
-import os
 from dataclasses import dataclass
 from typing import Annotated
 
 import pytest
-from redis import Redis
-
 from fluxqueue import FluxQueue
-
-REDIS_VERSION = os.getenv("REDIS_VERSION") if os.getenv("REDIS_VERSION") else "latest"
+from redis import Redis
 
 
 @dataclass

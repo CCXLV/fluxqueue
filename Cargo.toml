@@ -1,27 +1,12 @@
 [workspace]
-members = ["crates/fluxqueue-common", "crates/fluxqueue-worker"]
+members = ["crates/*"]
+resolver = "3"
 
 [workspace.package]
+edition = "2024"
 repository = "https://github.com/CCXLV/fluxqueue"
 homepage = "https://fluxqueue.ccxlv.dev"
 authors = ["Giorgi Merebashvili <mereba2627@gmail.com>"]
-edition = "2024"
-
-[package]
-name = "fluxqueue_core"
-version = "0.2.0"
-edition = "2024"
-
-[lib]
-name = "fluxqueue_core"
-crate-type = ["cdylib"]
-
-[dependencies]
-pyo3 = { version = "0.27.2", features = ["experimental-async"] }
-pyo3-async-runtimes = { version = "0.27.0", features = ["tokio-runtime"] }
-tokio = { version = "1.49.0", features = ["rt-multi-thread", "sync"] }
-deadpool-redis = { version = "0.22.1", features = ["rt_tokio_1"] }
-fluxqueue-common = { path = "./crates/fluxqueue-common" }
 
 [workspace.dependencies]
 fluxqueue-common = { path = "./crates/fluxqueue-common" }
