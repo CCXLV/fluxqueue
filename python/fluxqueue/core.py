@@ -3,7 +3,7 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, ParamSpec, TypeAlias, cast
 
-from .fluxqueue_core import FluxQueueCore
+from ._core import FluxQueueCore
 from .utils import get_task_name
 
 P = ParamSpec("P")
