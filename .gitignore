@@ -4,7 +4,7 @@ _tests/
 .venv*
 .env
 
-fluxqueue_core.cp**
+_core.cp**
 __pycache__/
 .ruff_cache/
 .pytest_cache/

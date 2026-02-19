@@ -55,7 +55,7 @@ docs = [
 build = ["maturin"]
 
 [tool.maturin]
-module-name = "fluxqueue.fluxqueue_core"
+module-name = "fluxqueue._core"
 python-source = "python"
 manifest-path = "crates/fluxqueue-core/Cargo.toml"
 

@@ -75,7 +75,7 @@ impl FluxQueueCore {
 }
 
 #[pymodule]
-fn fluxqueue_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FluxQueueCore>()?;
     Ok(())
 }
