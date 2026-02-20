@@ -1,13 +1,12 @@
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from functools import wraps
-from typing import Any, ParamSpec, TypeAlias, cast
+from typing import Any, ParamSpec, cast, get_type_hints, overload
 
 from ._core import FluxQueueCore
 from .utils import get_task_name
 
 P = ParamSpec("P")
-TaskDecorator: TypeAlias = Callable[[Callable[P, Any]], Callable[P, Any]]
 
 
 class FluxQueue:
@@ -30,7 +29,7 @@ class FluxQueue:
         name: str | None = None,
         queue: str = "default",
         max_retries: int = 3,
-    ) -> TaskDecorator[P]:
+    ):
         """
         Mark a function as a FluxQueue task.
 
@@ -52,7 +51,23 @@ class FluxQueue:
             before treating it as dead.
         """
 
-        def decorator(func: Callable[P, Any]) -> Callable[P, Any]:
+        @overload
+        def decorator(func: Callable[P, None]) -> Callable[P, None]: ...
+
+        @overload
+        def decorator(
+            func: Callable[P, Coroutine[Any, Any, None]],
+        ) -> Callable[P, Coroutine[Any, Any, None]]: ...
+
+        def decorator(
+            func: Callable[P, None | Coroutine[Any, Any, None]],
+        ) -> Callable[P, None | Coroutine[Any, Any, None]]:
+            type_hints = get_type_hints(func)
+            return_type = type_hints.get("return")
+
+            if return_type and return_type is not type(None):
+                raise TypeError(f"Task function must return None, got {return_type}")
+
             is_async = inspect.iscoroutinefunction(func)
             task_name = get_task_name(func, name)
 

@@ -30,3 +30,13 @@ async def test_async_task(test_env: TestEnvFixture):
     assert b"Async George" in redis_result[0]  # type: ignore
 
     test_env.redis_client.flushdb()
+
+
+def test_invalid_return_type(test_env: TestEnvFixture):
+    with pytest.raises(TypeError):
+
+        @test_env.fluxqueue.task()  # type: ignore
+        def test_task() -> int:
+            return 5
+
+        test_task()

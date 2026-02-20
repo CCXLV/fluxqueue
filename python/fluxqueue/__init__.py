@@ -1,3 +1,3 @@
 __all__ = ["FluxQueue"]
 
-from .core import FluxQueue
+from .client import FluxQueue
