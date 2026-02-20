@@ -1,7 +1,7 @@
 import inspect
 from collections.abc import Callable, Coroutine
 from functools import wraps
-from typing import Any, ParamSpec, cast, overload
+from typing import Any, ParamSpec, cast, get_type_hints, overload
 
 from ._core import FluxQueueCore
 from .utils import get_task_name
@@ -62,6 +62,12 @@ class FluxQueue:
         def decorator(
             func: Callable[P, None | Coroutine[Any, Any, None]],
         ) -> Callable[P, None | Coroutine[Any, Any, None]]:
+            type_hints = get_type_hints(func)
+            return_type = type_hints.get("return")
+
+            if return_type and return_type is not type(None):
+                raise TypeError(f"Task function must return None, got {return_type}")
+
             is_async = inspect.iscoroutinefunction(func)
             task_name = get_task_name(func, name)
 
