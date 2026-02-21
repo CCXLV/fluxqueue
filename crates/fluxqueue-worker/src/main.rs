@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Parser;
+use time::{UtcOffset, macros::format_description};
 use tracing::{error, info, warn};
+use tracing_subscriber::fmt::time::OffsetTime;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -49,9 +51,15 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let offset = UtcOffset::current_local_offset().unwrap();
+    let timer = OffsetTime::new(
+        offset,
+        format_description!("[year]:[month]:[day]:[hour]:[minute]:[second].[subsecond digits:3]"),
+    );
     tracing_subscriber::fmt()
         .with_env_filter("fluxqueue_worker=debug")
         .with_target(false)
+        .with_timer(timer)
         .init();
 
     let cli = Cli::parse();

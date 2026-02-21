@@ -4,6 +4,7 @@ use pyo3::{Bound, Py, PyAny, Python};
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -48,14 +49,18 @@ pub async fn run_worker(
 
     let queue_name = Arc::from(queue_name.to_string());
     let executor_ids = generate_executor_ids(concurrency);
+    let atomic_concurrency = Arc::new(AtomicUsize::new(concurrency));
+    let started_executors_count = Arc::new(AtomicUsize::new(0));
     let mut executors = JoinSet::new();
 
     let executor_futures: Vec<_> = (0..concurrency)
         .map(|i| {
+            let shutdown = shutdown.clone();
+            let concurrency = Arc::clone(&atomic_concurrency);
+            let counter = Arc::clone(&started_executors_count);
             let redis_client = Arc::clone(&redis_client);
             let queue_name = Arc::clone(&queue_name);
             let executor_id = Arc::clone(&executor_ids[i]);
-            let shutdown = shutdown.clone();
             let task_registry = Arc::clone(&task_registry);
 
             async move {
@@ -69,6 +74,8 @@ pub async fn run_worker(
 
                 Ok::<_, anyhow::Error>((
                     shutdown,
+                    concurrency,
+                    counter,
                     queue_name,
                     executor_id,
                     redis_client,
@@ -81,10 +88,20 @@ pub async fn run_worker(
 
     let results = futures::future::join_all(executor_futures).await;
     for result in results {
-        let (shutdown, queue_name, executor_id, redis_client, task_registry, python_dispatcher) =
-            result?;
+        let (
+            shutdown,
+            concurrency,
+            counter,
+            queue_name,
+            executor_id,
+            redis_client,
+            task_registry,
+            python_dispatcher,
+        ) = result?;
         executors.spawn(executor_loop(
             shutdown,
+            concurrency,
+            counter,
             queue_name,
             executor_id,
             redis_client,
@@ -93,14 +110,18 @@ pub async fn run_worker(
         ));
     }
 
+    let janitor_shutdown = shutdown.clone();
+    let concurrency = Arc::clone(&atomic_concurrency);
+    let counter = Arc::clone(&started_executors_count);
     let janitor_queue_name = Arc::clone(&queue_name);
     let janitor_redis = Arc::clone(&redis_client);
     let janitor_executor_ids = Arc::clone(&executor_ids);
-    let janitor_shutdown = shutdown.clone();
     let save_dead_tasks = Arc::new(save_dead_tasks);
 
     executors.spawn(janitor_loop(
         janitor_shutdown,
+        concurrency,
+        counter,
         janitor_queue_name,
         janitor_executor_ids,
         save_dead_tasks,
@@ -126,6 +147,8 @@ pub async fn run_worker(
 
 async fn executor_loop(
     mut shutdown: watch::Receiver<bool>,
+    concurrency: Arc<AtomicUsize>,
+    c: Arc<AtomicUsize>,
     queue_name: Arc<str>,
     executor_id: Arc<str>,
     redis_client: Arc<RedisClient>,
@@ -134,12 +157,12 @@ async fn executor_loop(
 ) -> Result<()> {
     let logger = Logger::new(format!("EXECUTOR {}", &executor_id));
 
-    logger.info(format_args!("Started!"));
+    c.fetch_add(1, Ordering::SeqCst);
+    check_worker_is_ready(concurrency, c);
 
     loop {
         tokio::select! {
             _ = shutdown.changed() => {
-                logger.info(format_args!("Shutting down..."));
                 return Ok(())
             }
 
@@ -213,6 +236,8 @@ async fn executor_loop(
 
 async fn janitor_loop(
     mut shutdown: watch::Receiver<bool>,
+    concurrency: Arc<AtomicUsize>,
+    c: Arc<AtomicUsize>,
     queue_name: Arc<str>,
     executor_ids: Arc<Vec<Arc<str>>>,
     save_dead_tasks: Arc<bool>,
@@ -220,12 +245,12 @@ async fn janitor_loop(
 ) -> Result<()> {
     let logger = Logger::new("JANITOR");
 
-    logger.info(format_args!("Started!"));
+    c.fetch_add(1, Ordering::SeqCst);
+    check_worker_is_ready(concurrency, c);
 
     loop {
         tokio::select! {
             _ = shutdown.changed() => {
-                logger.info(format_args!("Shutting down..."));
                 return Ok(())
             }
 
@@ -399,6 +424,14 @@ fn generate_executor_ids(num_executors: usize) -> Arc<Vec<Arc<str>>> {
     }
 
     Arc::new(ids)
+}
+
+fn check_worker_is_ready(concurrency: Arc<AtomicUsize>, c: Arc<AtomicUsize>) {
+    let current = c.load(Ordering::SeqCst);
+    if current == concurrency.load(Ordering::SeqCst) + 1 {
+        tracing::info!("Worker ready ({:?} executors, 1 janitor)", concurrency);
+        tracing::info!("{}", "-".repeat(65));
+    }
 }
 
 #[cfg(test)]
