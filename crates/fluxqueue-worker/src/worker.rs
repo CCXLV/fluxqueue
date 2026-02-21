@@ -14,6 +14,19 @@ use crate::redis_client::RedisClient;
 use crate::task::{PythonDispatcher, TaskRegistry};
 use fluxqueue_common::{Task, deserialize_raw_task_data};
 
+struct ExecutorContext {
+    queue_name: Arc<str>,
+    executor_id: Arc<str>,
+    redis_client: Arc<RedisClient>,
+    task_registry: Arc<TaskRegistry>,
+    python_dispatcher: Arc<PythonDispatcher>,
+}
+
+struct ReadyCheck {
+    concurrency: Arc<AtomicUsize>,
+    counter: Arc<AtomicUsize>,
+}
+
 pub async fn run_worker(
     mut shutdown: watch::Receiver<bool>,
     concurrency: usize,
@@ -72,42 +85,28 @@ pub async fn run_worker(
 
                 redis_client.set_executor_heartbeat(&executor_id).await?;
 
-                Ok::<_, anyhow::Error>((
-                    shutdown,
+                let ready_check = ReadyCheck {
                     concurrency,
                     counter,
+                };
+
+                let executor_context = ExecutorContext {
                     queue_name,
                     executor_id,
                     redis_client,
                     task_registry,
                     python_dispatcher,
-                ))
+                };
+
+                Ok::<_, anyhow::Error>((shutdown, ready_check, executor_context))
             }
         })
         .collect();
 
     let results = futures::future::join_all(executor_futures).await;
     for result in results {
-        let (
-            shutdown,
-            concurrency,
-            counter,
-            queue_name,
-            executor_id,
-            redis_client,
-            task_registry,
-            python_dispatcher,
-        ) = result?;
-        executors.spawn(executor_loop(
-            shutdown,
-            concurrency,
-            counter,
-            queue_name,
-            executor_id,
-            redis_client,
-            task_registry,
-            python_dispatcher,
-        ));
+        let (shutdown, ready_check, executor_context) = result?;
+        executors.spawn(executor_loop(shutdown, ready_check, executor_context));
     }
 
     let janitor_shutdown = shutdown.clone();
@@ -118,10 +117,14 @@ pub async fn run_worker(
     let janitor_executor_ids = Arc::clone(&executor_ids);
     let save_dead_tasks = Arc::new(save_dead_tasks);
 
-    executors.spawn(janitor_loop(
-        janitor_shutdown,
+    let ready_check = ReadyCheck {
         concurrency,
         counter,
+    };
+
+    executors.spawn(janitor_loop(
+        janitor_shutdown,
+        ready_check,
         janitor_queue_name,
         janitor_executor_ids,
         save_dead_tasks,
@@ -147,18 +150,13 @@ pub async fn run_worker(
 
 async fn executor_loop(
     mut shutdown: watch::Receiver<bool>,
-    concurrency: Arc<AtomicUsize>,
-    c: Arc<AtomicUsize>,
-    queue_name: Arc<str>,
-    executor_id: Arc<str>,
-    redis_client: Arc<RedisClient>,
-    task_registry: Arc<TaskRegistry>,
-    python_dispatcher: Arc<PythonDispatcher>,
+    ready_check: ReadyCheck,
+    ctx: ExecutorContext,
 ) -> Result<()> {
-    let logger = Logger::new(format!("EXECUTOR {}", &executor_id));
+    let logger = Logger::new(format!("EXECUTOR {}", &ctx.executor_id));
 
-    c.fetch_add(1, Ordering::SeqCst);
-    check_worker_is_ready(concurrency, c);
+    ready_check.counter.fetch_add(1, Ordering::SeqCst);
+    check_worker_is_ready(ready_check);
 
     loop {
         tokio::select! {
@@ -166,8 +164,8 @@ async fn executor_loop(
                 return Ok(())
             }
 
-            res = redis_client
-                .mark_task_as_processing(&queue_name, &executor_id)
+            res = ctx.redis_client
+                .mark_task_as_processing(&ctx.queue_name, &ctx.executor_id)
             => {
                 match res {
                     Ok(Some(raw_data)) => {
@@ -180,10 +178,10 @@ async fn executor_loop(
                             raw_data.len()
                         ));
 
-                        let Some(task_function) = task_registry.get(&task.name) else {
+                        let Some(task_function) = ctx.task_registry.get(&task.name) else {
                             logger.warn(format_args!("Task '{}' not found in registry. Skipping", &task.name));
-                            if let Err(e) = redis_client
-                                .remove_from_processing(&queue_name, &executor_id, &raw_data)
+                            if let Err(e) = ctx.redis_client
+                                .remove_from_processing(&ctx.queue_name, &ctx.executor_id, &raw_data)
                                 .await {
                                     logger.error(format_args!("Failed to remove the task: {}", e));
                             }
@@ -191,12 +189,12 @@ async fn executor_loop(
                         };
 
                         let duration_start = Instant::now();
-                        let task_result = run_task(python_dispatcher.clone(), &task, task_function).await;
+                        let task_result = run_task(ctx.python_dispatcher.clone(), &task, task_function).await;
 
                         match task_result {
                             Ok(_) => {
-                                if let Err(e) = redis_client
-                                    .remove_from_processing(&queue_name, &executor_id, &raw_data)
+                                if let Err(e) = ctx.redis_client
+                                    .remove_from_processing(&ctx.queue_name, &ctx.executor_id, &raw_data)
                                     .await {
                                         logger.error(format_args!("Failed to remove the task after successful run: {}", e));
                                 }
@@ -215,8 +213,8 @@ async fn executor_loop(
                                     duration_end.as_millis(),
                                     e
                                 ));
-                                if let Err(err) = redis_client
-                                    .mark_as_failed(&queue_name, &executor_id, &raw_data)
+                                if let Err(err) = ctx.redis_client
+                                    .mark_as_failed(&ctx.queue_name, &ctx.executor_id, &raw_data)
                                     .await {
                                         logger.error(format_args!("Failed to mark the task '{}' as failed: {}", &task.name, err));
                                 }
@@ -225,7 +223,7 @@ async fn executor_loop(
                     }
                     Ok(None) => continue,
                     Err(e) => {
-                        logger.error(format_args!("Worker {} redis error: {}", &executor_id, e));
+                        logger.error(format_args!("Worker {} redis error: {}", &ctx.executor_id, e));
                         tokio::time::sleep(Duration::from_millis(500)).await;
                     }
                 }
@@ -236,8 +234,7 @@ async fn executor_loop(
 
 async fn janitor_loop(
     mut shutdown: watch::Receiver<bool>,
-    concurrency: Arc<AtomicUsize>,
-    c: Arc<AtomicUsize>,
+    ready_check: ReadyCheck,
     queue_name: Arc<str>,
     executor_ids: Arc<Vec<Arc<str>>>,
     save_dead_tasks: Arc<bool>,
@@ -245,8 +242,8 @@ async fn janitor_loop(
 ) -> Result<()> {
     let logger = Logger::new("JANITOR");
 
-    c.fetch_add(1, Ordering::SeqCst);
-    check_worker_is_ready(concurrency, c);
+    ready_check.counter.fetch_add(1, Ordering::SeqCst);
+    check_worker_is_ready(ready_check);
 
     loop {
         tokio::select! {
@@ -426,10 +423,13 @@ fn generate_executor_ids(num_executors: usize) -> Arc<Vec<Arc<str>>> {
     Arc::new(ids)
 }
 
-fn check_worker_is_ready(concurrency: Arc<AtomicUsize>, c: Arc<AtomicUsize>) {
-    let current = c.load(Ordering::SeqCst);
-    if current == concurrency.load(Ordering::SeqCst) + 1 {
-        tracing::info!("Worker ready ({:?} executors, 1 janitor)", concurrency);
+fn check_worker_is_ready(ready_check: ReadyCheck) {
+    let current = ready_check.counter.load(Ordering::SeqCst);
+    if current == ready_check.concurrency.load(Ordering::SeqCst) + 1 {
+        tracing::info!(
+            "Worker ready ({:?} executors, 1 janitor)",
+            ready_check.concurrency
+        );
         tracing::info!("{}", "-".repeat(65));
     }
 }
