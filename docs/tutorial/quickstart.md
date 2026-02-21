@@ -14,11 +14,15 @@ fluxqueue = FluxQueue()
 
 # Define a task using the @fluxqueue.task decorator
 @fluxqueue.task()
-def send_email(to: str, subject: str, body: str):
-    print(f"Sending email to {to}")
-    print(f"Subject: {subject}")
-    print(f"Body: {body}")
-    # Your email sending logic here
+def send_email(to_email: str, subject: str, body: str):
+    with email_context() as email_client:
+        message = EmailMessage()
+        message["From"] = "test@example.com"
+        message["To"] = to_email
+        message["Subject"] = subject
+        message.set_content(body)
+
+        email_client.send_message(message)
 ```
 
 ## Enqueue Tasks
@@ -38,13 +42,18 @@ FluxQueue supports async functions too. Just define an async function and use th
 
 ```python
 @fluxqueue.task()
-async def process_data(data: dict):
-    # Your async processing logic
-    result = await some_async_operation(data)
-    return result
+async def send_email(to_email: str, subject: str, body: str):
+    async with email_context() as email_client:
+        message = EmailMessage()
+        message["From"] = "test@example.com"
+        message["To"] = to_email
+        message["Subject"] = subject
+        message.set_content(body)
 
-# Enqueue it (use await in async contexts)
-await process_data({"key": "value"})
+        await email_client.send_message(message)
+
+# Enqueue the task
+asyncio.run(send_email("user@example.com", "Hello", "This is a test email"))
 ```
 
 ## Task Options
