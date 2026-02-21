@@ -58,7 +58,7 @@ def send_email(to_email: str, subject: str, body: str):
         message["To"] = to_email
         message["Subject"] = subject
         message.set_content(body)
-        
+
         email_client.send_message(message)
 ```
 
@@ -85,7 +85,7 @@ async def send_email(data: dict):
         message["To"] = to_email
         message["Subject"] = subject
         message.set_content(body)
-        
+
         await email_client.send_message(message)
 ```
 
