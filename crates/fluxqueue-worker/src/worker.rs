@@ -14,6 +14,19 @@ use crate::redis_client::RedisClient;
 use crate::task::{PythonDispatcher, TaskRegistry};
 use fluxqueue_common::{Task, deserialize_raw_task_data};
 
+struct ExecutorContext {
+    queue_name: Arc<str>,
+    executor_id: Arc<str>,
+    redis_client: Arc<RedisClient>,
+    task_registry: Arc<TaskRegistry>,
+    python_dispatcher: Arc<PythonDispatcher>,
+}
+
+struct ReadyCheck {
+    concurrency: Arc<AtomicUsize>,
+    counter: Arc<AtomicUsize>,
+}
+
 pub async fn run_worker(
     mut shutdown: watch::Receiver<bool>,
     concurrency: usize,
