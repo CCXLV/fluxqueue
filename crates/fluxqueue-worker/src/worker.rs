@@ -4,6 +4,7 @@ use pyo3::{Bound, Py, PyAny, Python};
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -48,14 +49,18 @@ pub async fn run_worker(
 
     let queue_name = Arc::from(queue_name.to_string());
     let executor_ids = generate_executor_ids(concurrency);
+    let atomic_concurrency = Arc::new(AtomicUsize::new(concurrency));
+    let started_executors_count = Arc::new(AtomicUsize::new(0));
     let mut executors = JoinSet::new();
 
     let executor_futures: Vec<_> = (0..concurrency)
         .map(|i| {
+            let shutdown = shutdown.clone();
+            let concurrency = Arc::clone(&atomic_concurrency);
+            let counter = Arc::clone(&started_executors_count);
             let redis_client = Arc::clone(&redis_client);
             let queue_name = Arc::clone(&queue_name);
             let executor_id = Arc::clone(&executor_ids[i]);
-            let shutdown = shutdown.clone();
             let task_registry = Arc::clone(&task_registry);
 
             async move {
@@ -67,40 +72,46 @@ pub async fn run_worker(
 
                 redis_client.set_executor_heartbeat(&executor_id).await?;
 
-                Ok::<_, anyhow::Error>((
-                    shutdown,
+                let ready_check = ReadyCheck {
+                    concurrency,
+                    counter,
+                };
+
+                let executor_context = ExecutorContext {
                     queue_name,
                     executor_id,
                     redis_client,
                     task_registry,
                     python_dispatcher,
-                ))
+                };
+
+                Ok::<_, anyhow::Error>((shutdown, ready_check, executor_context))
             }
         })
         .collect();
 
     let results = futures::future::join_all(executor_futures).await;
     for result in results {
-        let (shutdown, queue_name, executor_id, redis_client, task_registry, python_dispatcher) =
-            result?;
-        executors.spawn(executor_loop(
-            shutdown,
-            queue_name,
-            executor_id,
-            redis_client,
-            task_registry,
-            python_dispatcher,
-        ));
+        let (shutdown, ready_check, executor_context) = result?;
+        executors.spawn(executor_loop(shutdown, ready_check, executor_context));
     }
 
+    let janitor_shutdown = shutdown.clone();
+    let concurrency = Arc::clone(&atomic_concurrency);
+    let counter = Arc::clone(&started_executors_count);
     let janitor_queue_name = Arc::clone(&queue_name);
     let janitor_redis = Arc::clone(&redis_client);
     let janitor_executor_ids = Arc::clone(&executor_ids);
-    let janitor_shutdown = shutdown.clone();
     let save_dead_tasks = Arc::new(save_dead_tasks);
+
+    let ready_check = ReadyCheck {
+        concurrency,
+        counter,
+    };
 
     executors.spawn(janitor_loop(
         janitor_shutdown,
+        ready_check,
         janitor_queue_name,
         janitor_executor_ids,
         save_dead_tasks,
@@ -124,27 +135,37 @@ pub async fn run_worker(
     Ok(())
 }
 
-async fn executor_loop(
-    mut shutdown: watch::Receiver<bool>,
+struct ExecutorContext {
     queue_name: Arc<str>,
     executor_id: Arc<str>,
     redis_client: Arc<RedisClient>,
     task_registry: Arc<TaskRegistry>,
     python_dispatcher: Arc<PythonDispatcher>,
-) -> Result<()> {
-    let logger = Logger::new(format!("EXECUTOR {}", &executor_id));
+}
 
-    logger.info(format_args!("Started!"));
+struct ReadyCheck {
+    concurrency: Arc<AtomicUsize>,
+    counter: Arc<AtomicUsize>,
+}
+
+async fn executor_loop(
+    mut shutdown: watch::Receiver<bool>,
+    ready_check: ReadyCheck,
+    ctx: ExecutorContext,
+) -> Result<()> {
+    let logger = Logger::new(format!("EXECUTOR {}", &ctx.executor_id));
+
+    ready_check.counter.fetch_add(1, Ordering::SeqCst);
+    check_worker_is_ready(ready_check);
 
     loop {
         tokio::select! {
             _ = shutdown.changed() => {
-                logger.info(format_args!("Shutting down..."));
                 return Ok(())
             }
 
-            res = redis_client
-                .mark_task_as_processing(&queue_name, &executor_id)
+            res = ctx.redis_client
+                .mark_task_as_processing(&ctx.queue_name, &ctx.executor_id)
             => {
                 match res {
                     Ok(Some(raw_data)) => {
@@ -157,10 +178,10 @@ async fn executor_loop(
                             raw_data.len()
                         ));
 
-                        let Some(task_function) = task_registry.get(&task.name) else {
+                        let Some(task_function) = ctx.task_registry.get(&task.name) else {
                             logger.warn(format_args!("Task '{}' not found in registry. Skipping", &task.name));
-                            if let Err(e) = redis_client
-                                .remove_from_processing(&queue_name, &executor_id, &raw_data)
+                            if let Err(e) = ctx.redis_client
+                                .remove_from_processing(&ctx.queue_name, &ctx.executor_id, &raw_data)
                                 .await {
                                     logger.error(format_args!("Failed to remove the task: {}", e));
                             }
@@ -168,12 +189,12 @@ async fn executor_loop(
                         };
 
                         let duration_start = Instant::now();
-                        let task_result = run_task(python_dispatcher.clone(), &task, task_function).await;
+                        let task_result = run_task(ctx.python_dispatcher.clone(), &task, task_function).await;
 
                         match task_result {
                             Ok(_) => {
-                                if let Err(e) = redis_client
-                                    .remove_from_processing(&queue_name, &executor_id, &raw_data)
+                                if let Err(e) = ctx.redis_client
+                                    .remove_from_processing(&ctx.queue_name, &ctx.executor_id, &raw_data)
                                     .await {
                                         logger.error(format_args!("Failed to remove the task after successful run: {}", e));
                                 }
@@ -192,8 +213,8 @@ async fn executor_loop(
                                     duration_end.as_millis(),
                                     e
                                 ));
-                                if let Err(err) = redis_client
-                                    .mark_as_failed(&queue_name, &executor_id, &raw_data)
+                                if let Err(err) = ctx.redis_client
+                                    .mark_as_failed(&ctx.queue_name, &ctx.executor_id, &raw_data)
                                     .await {
                                         logger.error(format_args!("Failed to mark the task '{}' as failed: {}", &task.name, err));
                                 }
@@ -202,7 +223,7 @@ async fn executor_loop(
                     }
                     Ok(None) => continue,
                     Err(e) => {
-                        logger.error(format_args!("Worker {} redis error: {}", &executor_id, e));
+                        logger.error(format_args!("Worker {} redis error: {}", &ctx.executor_id, e));
                         tokio::time::sleep(Duration::from_millis(500)).await;
                     }
                 }
@@ -213,6 +234,7 @@ async fn executor_loop(
 
 async fn janitor_loop(
     mut shutdown: watch::Receiver<bool>,
+    ready_check: ReadyCheck,
     queue_name: Arc<str>,
     executor_ids: Arc<Vec<Arc<str>>>,
     save_dead_tasks: Arc<bool>,
@@ -220,12 +242,12 @@ async fn janitor_loop(
 ) -> Result<()> {
     let logger = Logger::new("JANITOR");
 
-    logger.info(format_args!("Started!"));
+    ready_check.counter.fetch_add(1, Ordering::SeqCst);
+    check_worker_is_ready(ready_check);
 
     loop {
         tokio::select! {
             _ = shutdown.changed() => {
-                logger.info(format_args!("Shutting down..."));
                 return Ok(())
             }
 
@@ -399,6 +421,17 @@ fn generate_executor_ids(num_executors: usize) -> Arc<Vec<Arc<str>>> {
     }
 
     Arc::new(ids)
+}
+
+fn check_worker_is_ready(ready_check: ReadyCheck) {
+    let current = ready_check.counter.load(Ordering::SeqCst);
+    if current == ready_check.concurrency.load(Ordering::SeqCst) + 1 {
+        tracing::info!(
+            "Worker ready ({:?} executors, 1 janitor)",
+            ready_check.concurrency
+        );
+        tracing::info!("{}", "-".repeat(65));
+    }
 }
 
 #[cfg(test)]

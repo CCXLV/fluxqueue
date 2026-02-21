@@ -41,7 +41,7 @@ pub fn initial_logs(
     info!("Redis: {}", redis_url);
     info!("Tasks module: {}", tasks_module_path);
     info!("Tasks found: {:?}", tasks);
-    info!("{}", "-".repeat(65));
+    info!("Starting up the executors...");
 }
 
 #[cfg(test)]
