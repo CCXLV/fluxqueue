@@ -50,20 +50,39 @@ pub async fn run_worker(
     let executor_ids = generate_executor_ids(concurrency);
     let mut executors = JoinSet::new();
 
-    for i in 0..concurrency {
-        let redis_client = Arc::clone(&redis_client);
-        let queue_name = Arc::clone(&queue_name);
-        let executor_id = Arc::clone(&executor_ids[i]);
-        let shutdown = shutdown.clone();
-        let task_registry = Arc::clone(&task_registry);
-        let python_dispatcher = Arc::new(PythonDispatcher::new()?);
+    let executor_futures: Vec<_> = (0..concurrency)
+        .map(|i| {
+            let redis_client = Arc::clone(&redis_client);
+            let queue_name = Arc::clone(&queue_name);
+            let executor_id = Arc::clone(&executor_ids[i]);
+            let shutdown = shutdown.clone();
+            let task_registry = Arc::clone(&task_registry);
 
-        redis_client
-            .register_executor(&queue_name, &executor_id)
-            .await?;
+            async move {
+                let python_dispatcher = Arc::new(PythonDispatcher::new()?);
 
-        redis_client.set_executor_heartbeat(&executor_id).await?;
+                redis_client
+                    .register_executor(&queue_name, &executor_id)
+                    .await?;
 
+                redis_client.set_executor_heartbeat(&executor_id).await?;
+
+                Ok::<_, anyhow::Error>((
+                    shutdown,
+                    queue_name,
+                    executor_id,
+                    redis_client,
+                    task_registry,
+                    python_dispatcher,
+                ))
+            }
+        })
+        .collect();
+
+    let results = futures::future::join_all(executor_futures).await;
+    for result in results {
+        let (shutdown, queue_name, executor_id, redis_client, task_registry, python_dispatcher) =
+            result?;
         executors.spawn(executor_loop(
             shutdown,
             queue_name,
