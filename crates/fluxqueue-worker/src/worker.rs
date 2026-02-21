@@ -1,8 +1,6 @@
-use anyhow::{Context, Result, anyhow};
-use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyModule, PyTuple};
+use anyhow::{Result, anyhow};
+use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyModule};
 use pyo3::{Bound, Py, PyAny, Python};
-use pythonize::pythonize;
-use rmp_serde::from_slice;
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -58,7 +56,7 @@ pub async fn run_worker(
         let executor_id = Arc::clone(&executor_ids[i]);
         let shutdown = shutdown.clone();
         let task_registry = Arc::clone(&task_registry);
-        let python_dispatcher = Arc::new(PythonDispatcher::new());
+        let python_dispatcher = Arc::new(PythonDispatcher::new()?);
 
         redis_client
             .register_executor(&queue_name, &executor_id)
@@ -276,50 +274,13 @@ async fn run_task(
     task: &Task,
     task_function: Arc<Py<PyAny>>,
 ) -> Result<()> {
-    let task_args: rmpv::Value = from_slice(&task.args).context(format!(
-        "Failed to deserialize task '{}' function args",
-        task.name
-    ))?;
-    let task_kwargs: rmpv::Value = from_slice(&task.kwargs).context(format!(
-        "Failed to deserialize task '{}' function kwargs",
-        task.name
-    ))?;
+    let task_name = Arc::new(task.name.clone());
+    let raw_args = Arc::new(task.args.clone());
+    let raw_kwargs = Arc::new(task.kwargs.clone());
 
-    let maybe_coro = Python::attach(|py| -> Result<Option<Py<PyAny>>> {
-        let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
-        let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
-
-        let args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
-            list.to_tuple()
-        } else if let Ok(tuple) = py_args.cast::<PyTuple>() {
-            tuple.clone()
-        } else {
-            anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
-        };
-
-        let kwargs_dict = py_kwargs
-            .cast_into::<PyDict>()
-            .map_err(|_| anyhow!("Kwargs must be a map/dict"))?;
-
-        let result = task_function
-            .call(py, args_tuple, Some(&kwargs_dict))
-            .map_err(|e| anyhow!("Failed to call Python function: {:?}", e))?;
-
-        let bound_result = result.bind(py);
-        let is_coroutine = bound_result
-            .hasattr("__await__")
-            .map_err(|_| anyhow!("Failed to check if result is awaitable"))?;
-
-        if is_coroutine {
-            Ok(Some(result))
-        } else {
-            Ok(None)
-        }
-    })?;
-
-    if let Some(coro) = maybe_coro {
-        python_dispatcher.execute(coro).await?;
-    }
+    python_dispatcher
+        .execute(task_function, task_name, raw_args, raw_kwargs)
+        .await?;
 
     Ok(())
 }
@@ -356,7 +317,7 @@ fn get_task_functions(module_path: &str, queue_name: &str) -> Result<Vec<(String
             filename.as_c_str(),
             module_name.as_c_str(),
         )
-        .context("Failed to import python module")?;
+        .map_err(|e| anyhow!("Failed to import python module: {}", e))?;
 
         let py_funcs: Bound<'_, PyDict> = module
             .getattr("list_functions")
@@ -505,7 +466,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_task_with_sync_function() -> Result<()> {
         let task_registry = TaskRegistry::new();
-        let python_dispatcher = Arc::new(PythonDispatcher::new());
+        let python_dispatcher = Arc::new(PythonDispatcher::new()?);
         let module_path_str = get_test_module_path("test_tasks_module.py");
         let task_functions = get_task_functions(&module_path_str, "default")?;
 
@@ -537,7 +498,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_task_with_async_function() -> Result<()> {
         let task_registry = TaskRegistry::new();
-        let python_dispatcher = Arc::new(PythonDispatcher::new());
+        let python_dispatcher = Arc::new(PythonDispatcher::new()?);
         let module_path_str = get_test_module_path("test_tasks_module.py");
         let task_functions = get_task_functions(&module_path_str, "default")?;
 
