@@ -334,80 +334,11 @@ mod tests {
     use crate::logger::TestWriter;
     use std::sync::{Arc, Mutex};
 
-    // #[test]
-    // fn test_path_to_module_path() -> Result<()> {
-    //     let current_dir = Path::new("project");
-    //     let tasks_path = Path::new("../project/tasks.py");
-    //     let normalized_path = normalize_path(tasks_path);
-    //     let module_path = path_to_module_path(current_dir, &normalized_path);
-    //     let expected_path = Path::new("project/tasks.py");
-
-    //     assert_eq!(normalized_path, expected_path);
-    //     assert_eq!(module_path, Some("tasks".to_string()));
-
-    //     Ok(())
-    // }
-
     fn get_test_module_path(filename: &str) -> String {
         let current_dir = std::env::current_dir().unwrap();
         let test_module_path = current_dir.join("tests").join(filename);
         test_module_path.to_str().unwrap().to_string()
     }
-
-    // #[test]
-    // fn test_get_task_functions_valid_module() -> Result<()> {
-    //     let module_path_str = get_test_module_path("test_tasks_module.py");
-    //     let functions = get_registry(&module_path_str, "default")?;
-
-    //     assert_eq!(functions.len(), 3);
-
-    //     let task_names: Vec<String> = functions.iter().map(|(name, _)| name.clone()).collect();
-    //     assert!(task_names.contains(&"task-1".to_string()));
-    //     assert!(task_names.contains(&"task-2".to_string()));
-    //     assert!(task_names.contains(&"async-task".to_string()));
-
-    //     assert!(!task_names.contains(&"high-priority-task".to_string()));
-
-    //     Ok(())
-    // }
-
-    // #[test]
-    // fn test_get_task_functions_different_queue() -> Result<()> {
-    //     let module_path_str = get_test_module_path("test_tasks_module.py");
-    //     let functions = get_registry(&module_path_str, "high-priority")?;
-
-    //     assert_eq!(functions.len(), 1);
-    //     assert_eq!(functions[0].0, "high-priority-task");
-
-    //     Ok(())
-    // }
-
-    // #[test]
-    // fn test_get_task_functions_empty_module() -> Result<()> {
-    //     let module_path_str = get_test_module_path("test_tasks_empty.py");
-    //     let functions = get_registry(&module_path_str, "default")?;
-
-    //     assert_eq!(functions.len(), 0);
-
-    //     Ok(())
-    // }
-
-    // #[test]
-    // fn test_get_task_functions_duplicate_names() {
-    //     let module_path_str = get_test_module_path("test_tasks_duplicate.py");
-
-    //     let result = get_registry(&module_path_str, "default");
-    //     assert!(result.is_err());
-
-    //     let error_msg = result.unwrap_err().to_string();
-    //     assert!(error_msg.contains("duplicated") || error_msg.contains("duplicate"));
-    // }
-
-    // #[test]
-    // fn test_get_task_functions_invalid_path() {
-    //     let result = get_registry("nonexistent/path/to/module.py", "default");
-    //     assert!(result.is_err());
-    // }
 
     #[tokio::test]
     async fn test_run_task_with_sync_function() -> Result<()> {
