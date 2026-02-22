@@ -9,7 +9,6 @@ use rmpv::Value;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
@@ -275,36 +274,6 @@ async fn run_task(
     }
 
     Ok(())
-}
-
-pub struct DispatcherPool {
-    dispatchers: Vec<Arc<PythonDispatcher>>,
-    index: AtomicUsize,
-}
-
-impl DispatcherPool {
-    pub fn new(concurrency: usize) -> Result<Self> {
-        // let logical_cores = num_cpus::get();
-        // let pool_size = (concurrency / 4)
-        //     .max(1)
-        //     .min(logical_cores * 2)
-        //     .max(logical_cores);
-
-        let mut dispatchers = Vec::with_capacity(concurrency);
-        for _ in 0..concurrency {
-            dispatchers.push(Arc::new(PythonDispatcher::new()?));
-        }
-
-        Ok(Self {
-            dispatchers,
-            index: AtomicUsize::new(0),
-        })
-    }
-
-    pub fn get(&self) -> Arc<PythonDispatcher> {
-        let idx = self.index.fetch_add(1, Ordering::Relaxed) % self.dispatchers.len();
-        self.dispatchers[idx].clone()
-    }
 }
 
 fn normalize_path(path: &Path) -> PathBuf {

@@ -8,7 +8,7 @@ use tokio::task::JoinSet;
 
 use crate::logger::{Logger, initial_logs};
 use crate::redis_client::RedisClient;
-use crate::task::{DispatcherPool, TaskRegistry};
+use crate::task::{PythonDispatcher, TaskRegistry};
 use fluxqueue_common::{Task, deserialize_raw_task_data};
 
 pub async fn run_worker(
@@ -38,7 +38,6 @@ pub async fn run_worker(
         registered_contexts,
     );
 
-    let dispatcher_pool = Arc::new(DispatcherPool::new(concurrency)?);
     let queue_name = Arc::new(queue_name);
     let executor_ids = generate_executor_ids(concurrency);
     let atomic_concurrency = Arc::new(AtomicUsize::new(concurrency));
@@ -54,9 +53,10 @@ pub async fn run_worker(
             let queue_name = Arc::clone(&queue_name);
             let executor_id = Arc::clone(&executor_ids[i]);
             let task_registry = Arc::clone(&task_registry);
-            let dispatcher_pool = Arc::clone(&dispatcher_pool);
 
             async move {
+                let python_dispatcher = Arc::new(PythonDispatcher::new()?);
+
                 redis_client
                     .register_executor(&queue_name, &executor_id)
                     .await?;
@@ -73,7 +73,7 @@ pub async fn run_worker(
                     executor_id,
                     redis_client,
                     task_registry,
-                    dispatcher_pool,
+                    python_dispatcher,
                 };
 
                 Ok::<_, anyhow::Error>((shutdown, ready_check, executor_context))
@@ -131,7 +131,7 @@ struct ExecutorContext {
     executor_id: Arc<String>,
     redis_client: Arc<RedisClient>,
     task_registry: Arc<TaskRegistry>,
-    dispatcher_pool: Arc<DispatcherPool>,
+    python_dispatcher: Arc<PythonDispatcher>,
 }
 
 struct ReadyCheck {
@@ -179,7 +179,7 @@ async fn executor_loop(
                             return Ok(());
                         };
 
-                        let task_result = run_task(ctx.executor_id.clone(), ctx.dispatcher_pool.clone(), &task, task_function).await;
+                        let task_result = run_task(ctx.executor_id.clone(), ctx.python_dispatcher.clone(), &task, task_function).await;
 
                         match task_result {
                             Ok(_) => {
@@ -291,7 +291,7 @@ async fn janitor_loop(
 
 async fn run_task(
     executor_id: Arc<String>,
-    dispatcher_pool: Arc<DispatcherPool>,
+    python_dispatcher: Arc<PythonDispatcher>,
     task: &Task,
     task_function: Arc<Py<PyAny>>,
 ) -> Result<()> {
@@ -299,8 +299,7 @@ async fn run_task(
     let raw_args = Arc::new(task.args.clone());
     let raw_kwargs = Arc::new(task.kwargs.clone());
 
-    let dispatcher = dispatcher_pool.get();
-    dispatcher
+    python_dispatcher
         .execute(executor_id, task_function, task_name, raw_args, raw_kwargs)
         .await?;
 
@@ -412,7 +411,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_task_with_sync_function() -> Result<()> {
-        let dispatcher_pool = Arc::new(DispatcherPool::new(1)?);
+        let dispatcher_pool = Arc::new(PythonDispatcher::new()?);
         let module_path_str = get_test_module_path("test_tasks_module.py");
         let task_registry = TaskRegistry::new(&module_path_str, "default")?;
 
@@ -445,7 +444,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_task_with_async_function() -> Result<()> {
-        let dispatcher_pool = Arc::new(DispatcherPool::new(1)?);
+        let dispatcher_pool = Arc::new(PythonDispatcher::new()?);
         let module_path_str = get_test_module_path("test_tasks_module.py");
         let task_registry = TaskRegistry::new(&module_path_str, "default")?;
 
