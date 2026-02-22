@@ -16,6 +16,11 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::logger::Logger;
 
+type TasksAndContexts = (
+    HashMap<String, Arc<Py<PyAny>>>,
+    HashMap<String, Arc<Py<PyAny>>>,
+);
+
 #[derive(Debug)]
 pub struct TaskRegistry {
     tasks: Arc<RwLock<HashMap<String, Arc<Py<PyAny>>>>>,
@@ -48,56 +53,51 @@ impl TaskRegistry {
         let real_module_path = real_module_path.unwrap();
         let module_dir = project_root.to_string_lossy().to_string();
 
-        let (tasks, contexts) = Python::attach(
-            |py| -> Result<(
-                HashMap<String, Arc<Py<PyAny>>>,
-                HashMap<String, Arc<Py<PyAny>>>,
-            )> {
-                let module = PyModule::from_code(
-                    py,
-                    script_cstr.as_c_str(),
-                    filename.as_c_str(),
-                    module_name.as_c_str(),
-                )
-                .map_err(|e| anyhow!("Failed to import python module: {}", e))?;
+        let (tasks, contexts) = Python::attach(|py| -> Result<TasksAndContexts> {
+            let module = PyModule::from_code(
+                py,
+                script_cstr.as_c_str(),
+                filename.as_c_str(),
+                module_name.as_c_str(),
+            )
+            .map_err(|e| anyhow!("Failed to import python module: {}", e))?;
 
-                let registry: Bound<'_, PyDict> = module
-                    .getattr("get_registry")
-                    .map_err(|e| anyhow!("Failed to get 'get_registry' script: {}", e))?
-                    .call1((real_module_path, queue_name, module_dir))
-                    .map_err(|e| anyhow!("Failed to get tasks: {}", e))?
-                    .cast_into::<PyDict>()
-                    .map_err(|_| anyhow!("Failed to cast result to a Python Dictionary"))?;
+            let registry: Bound<'_, PyDict> = module
+                .getattr("get_registry")
+                .map_err(|e| anyhow!("Failed to get 'get_registry' script: {}", e))?
+                .call1((real_module_path, queue_name, module_dir))
+                .map_err(|e| anyhow!("Failed to get tasks: {}", e))?
+                .cast_into::<PyDict>()
+                .map_err(|_| anyhow!("Failed to cast result to a Python Dictionary"))?;
 
-                let tasks: HashMap<String, Arc<Py<PyAny>>> = registry
-                    .get_item("tasks")?
-                    .expect("tasks missing")
-                    .cast::<PyDict>()
-                    .map_err(|e| anyhow!("tasks is not a dict: {}", e))?
-                    .iter()
-                    .filter_map(|(key, value)| {
-                        let name: String = key.extract().ok()?;
-                        let func: Py<PyAny> = value.unbind();
-                        Some((name, Arc::new(func)))
-                    })
-                    .collect();
+            let tasks: HashMap<String, Arc<Py<PyAny>>> = registry
+                .get_item("tasks")?
+                .expect("tasks missing")
+                .cast::<PyDict>()
+                .map_err(|e| anyhow!("tasks is not a dict: {}", e))?
+                .iter()
+                .filter_map(|(key, value)| {
+                    let name: String = key.extract().ok()?;
+                    let func: Py<PyAny> = value.unbind();
+                    Some((name, Arc::new(func)))
+                })
+                .collect();
 
-                let contexts: HashMap<String, Arc<Py<PyAny>>> = registry
-                    .get_item("contexts")?
-                    .expect("contexts missing")
-                    .cast::<PyDict>()
-                    .map_err(|e| anyhow!("contexts is not a dict: {}", e))?
-                    .iter()
-                    .filter_map(|(key, value): (Bound<PyAny>, Bound<PyAny>)| {
-                        let name: String = key.extract().ok()?;
-                        let func: Py<PyAny> = value.unbind();
-                        Some((name, Arc::new(func)))
-                    })
-                    .collect();
+            let contexts: HashMap<String, Arc<Py<PyAny>>> = registry
+                .get_item("contexts")?
+                .expect("contexts missing")
+                .cast::<PyDict>()
+                .map_err(|e| anyhow!("contexts is not a dict: {}", e))?
+                .iter()
+                .filter_map(|(key, value): (Bound<PyAny>, Bound<PyAny>)| {
+                    let name: String = key.extract().ok()?;
+                    let func: Py<PyAny> = value.unbind();
+                    Some((name, Arc::new(func)))
+                })
+                .collect();
 
-                Ok((tasks, contexts))
-            },
-        )?;
+            Ok((tasks, contexts))
+        })?;
 
         Ok(Self {
             tasks: Arc::new(RwLock::new(tasks)),
