@@ -33,7 +33,7 @@ impl RedisClient {
         Ok(())
     }
 
-    pub async fn set_executors_heartbeat(&self, executor_ids: Arc<Vec<Arc<str>>>) -> Result<()> {
+    pub async fn set_executors_heartbeat(&self, executor_ids: Arc<Vec<Arc<String>>>) -> Result<()> {
         for id in executor_ids.iter() {
             self.set_executor_heartbeat(id).await?;
         }
@@ -60,7 +60,7 @@ impl RedisClient {
     pub async fn cleanup_executors_registry(
         &self,
         queue_name: &str,
-        ids: Arc<Vec<Arc<str>>>,
+        ids: Arc<Vec<Arc<String>>>,
     ) -> Result<()> {
         let mut conn = self.redis_pool.get().await?;
         let executors_key = keys::get_executors_key(queue_name);

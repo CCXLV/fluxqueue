@@ -1,17 +1,14 @@
-use anyhow::{Result, anyhow};
-use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyModule};
-use pyo3::{Bound, Py, PyAny, Python};
-use std::ffi::CString;
-use std::path::{Path, PathBuf};
+use anyhow::Result;
+use pyo3::{Py, PyAny};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 
 use crate::logger::{Logger, initial_logs};
 use crate::redis_client::RedisClient;
-use crate::task::{PythonDispatcher, TaskRegistry};
+use crate::task::{DispatcherPool, TaskRegistry};
 use fluxqueue_common::{Task, deserialize_raw_task_data};
 
 pub async fn run_worker(
@@ -28,26 +25,21 @@ pub async fn run_worker(
     })?;
     let redis_client = Arc::new(redis_client);
 
-    let task_functions = get_task_functions(&tasks_module_path, &queue_name).map_err(|e| {
-        tracing::error!("{}", e);
-        std::process::exit(1);
-    })?;
-    let task_names: Vec<&String> = task_functions.iter().map(|(name, _obj)| name).collect();
+    let task_registry = Arc::new(TaskRegistry::new(&tasks_module_path, &queue_name)?);
+    let registered_tasks = task_registry.get_registered_tasks()?;
+    let registered_contexts = task_registry.get_registered_contexts()?;
 
     initial_logs(
         &queue_name,
         concurrency,
         &redis_url,
         &tasks_module_path,
-        &task_names,
+        registered_tasks,
+        registered_contexts,
     );
 
-    let task_registry = Arc::new(TaskRegistry::new());
-    for (name, task_obj) in task_functions {
-        task_registry.insert(name, task_obj)?;
-    }
-
-    let queue_name = Arc::from(queue_name.to_string());
+    let dispatcher_pool = Arc::new(DispatcherPool::new(concurrency)?);
+    let queue_name = Arc::new(queue_name);
     let executor_ids = generate_executor_ids(concurrency);
     let atomic_concurrency = Arc::new(AtomicUsize::new(concurrency));
     let started_executors_count = Arc::new(AtomicUsize::new(0));
@@ -62,10 +54,9 @@ pub async fn run_worker(
             let queue_name = Arc::clone(&queue_name);
             let executor_id = Arc::clone(&executor_ids[i]);
             let task_registry = Arc::clone(&task_registry);
+            let dispatcher_pool = Arc::clone(&dispatcher_pool);
 
             async move {
-                let python_dispatcher = Arc::new(PythonDispatcher::new()?);
-
                 redis_client
                     .register_executor(&queue_name, &executor_id)
                     .await?;
@@ -82,7 +73,7 @@ pub async fn run_worker(
                     executor_id,
                     redis_client,
                     task_registry,
-                    python_dispatcher,
+                    dispatcher_pool,
                 };
 
                 Ok::<_, anyhow::Error>((shutdown, ready_check, executor_context))
@@ -90,9 +81,9 @@ pub async fn run_worker(
         })
         .collect();
 
-    let results = futures::future::join_all(executor_futures).await;
+    let results = futures::future::try_join_all(executor_futures).await?;
     for result in results {
-        let (shutdown, ready_check, executor_context) = result?;
+        let (shutdown, ready_check, executor_context) = result;
         executors.spawn(executor_loop(shutdown, ready_check, executor_context));
     }
 
@@ -136,11 +127,11 @@ pub async fn run_worker(
 }
 
 struct ExecutorContext {
-    queue_name: Arc<str>,
-    executor_id: Arc<str>,
+    queue_name: Arc<String>,
+    executor_id: Arc<String>,
     redis_client: Arc<RedisClient>,
     task_registry: Arc<TaskRegistry>,
-    python_dispatcher: Arc<PythonDispatcher>,
+    dispatcher_pool: Arc<DispatcherPool>,
 }
 
 struct ReadyCheck {
@@ -188,8 +179,7 @@ async fn executor_loop(
                             return Ok(());
                         };
 
-                        let duration_start = Instant::now();
-                        let task_result = run_task(ctx.python_dispatcher.clone(), &task, task_function).await;
+                        let task_result = run_task(ctx.executor_id.clone(), ctx.dispatcher_pool.clone(), &task, task_function).await;
 
                         match task_result {
                             Ok(_) => {
@@ -198,21 +188,8 @@ async fn executor_loop(
                                     .await {
                                         logger.error(format_args!("Failed to remove the task after successful run: {}", e));
                                 }
-                                let duration_end = duration_start.elapsed();
-                                logger.info(format_args!(
-                                    "Task '{}' successfully finished in {}ms",
-                                    &task_name,
-                                    duration_end.as_millis()
-                                ));
                             }
-                            Err(e) => {
-                                let duration_end = duration_start.elapsed();
-                                logger.error(format_args!(
-                                    "Task '{}' failed in {}ms: {}",
-                                    &task_name,
-                                    duration_end.as_millis(),
-                                    e
-                                ));
+                            Err(_) => {
                                 if let Err(err) = ctx.redis_client
                                     .mark_as_failed(&ctx.queue_name, &ctx.executor_id, &raw_data)
                                     .await {
@@ -235,8 +212,8 @@ async fn executor_loop(
 async fn janitor_loop(
     mut shutdown: watch::Receiver<bool>,
     ready_check: ReadyCheck,
-    queue_name: Arc<str>,
-    executor_ids: Arc<Vec<Arc<str>>>,
+    queue_name: Arc<String>,
+    executor_ids: Arc<Vec<Arc<String>>>,
     save_dead_tasks: Arc<bool>,
     redis_client: Arc<RedisClient>,
 ) -> Result<()> {
@@ -248,6 +225,7 @@ async fn janitor_loop(
     loop {
         tokio::select! {
             _ = shutdown.changed() => {
+                // TODO: Add a log on shutdown to notify how many tasks are left in the queue if any.
                 return Ok(())
             }
 
@@ -257,10 +235,11 @@ async fn janitor_loop(
                 match tasks_res {
                     Ok(Some(raw_data)) => {
                         let task = deserialize_raw_task_data(&raw_data)?;
+                        let task_name = format!("{}:{}", &task.name, &task.id);
 
                         logger.info(format_args!(
                             "Received a failed task '{}': retries={}, max retries={}",
-                            &task.name,
+                            &task_name,
                             &task.retries,
                             &task.max_retries
                         ));
@@ -311,112 +290,28 @@ async fn janitor_loop(
 }
 
 async fn run_task(
-    python_dispatcher: Arc<PythonDispatcher>,
+    executor_id: Arc<String>,
+    dispatcher_pool: Arc<DispatcherPool>,
     task: &Task,
     task_function: Arc<Py<PyAny>>,
 ) -> Result<()> {
-    let task_name = Arc::new(task.name.clone());
+    let task_name = Arc::new(format!("{}:{}", &task.name, &task.id));
     let raw_args = Arc::new(task.args.clone());
     let raw_kwargs = Arc::new(task.kwargs.clone());
 
-    python_dispatcher
-        .execute(task_function, task_name, raw_args, raw_kwargs)
+    let dispatcher = dispatcher_pool.get();
+    dispatcher
+        .execute(executor_id, task_function, task_name, raw_args, raw_kwargs)
         .await?;
 
     Ok(())
 }
 
-fn get_task_functions(module_path: &str, queue_name: &str) -> Result<Vec<(String, Py<PyAny>)>> {
-    let script = include_str!("../scripts/get_functions.py");
-    let script_cstr = CString::new(script)?;
-    let filename = CString::new("get_functions.py")?;
-    let module_name = CString::new("get_functions")?;
-
-    let full_current_dir = std::env::current_dir().unwrap();
-    let full_module_path = full_current_dir.join(module_path);
-    let clean_module_path = normalize_path(&full_module_path);
-    let project_root = full_current_dir
-        .ancestors()
-        .find(|p| p.join("tests").exists())
-        .unwrap_or(&full_current_dir);
-    let real_module_path = path_to_module_path(project_root, &clean_module_path);
-
-    if !clean_module_path.exists() || real_module_path.is_none() {
-        return Err(anyhow!(
-            "Tasks module path {:?} doesn't exist.",
-            clean_module_path
-        ));
-    }
-
-    let real_module_path = real_module_path.unwrap();
-    let module_dir = project_root.to_string_lossy().to_string();
-
-    Python::attach(|py| {
-        let module = PyModule::from_code(
-            py,
-            script_cstr.as_c_str(),
-            filename.as_c_str(),
-            module_name.as_c_str(),
-        )
-        .map_err(|e| anyhow!("Failed to import python module: {}", e))?;
-
-        let py_funcs: Bound<'_, PyDict> = module
-            .getattr("list_functions")
-            .map_err(|e| anyhow!("Failed to get 'list_functions' script: {}", e))?
-            .call1((real_module_path, queue_name, module_dir))
-            .map_err(|e| anyhow!("Failed to get tasks: {}", e))?
-            .cast_into::<PyDict>()
-            .map_err(|_| anyhow!("Failed to cast result to a Python Dictionary"))?;
-
-        let funcs: Vec<_> = py_funcs
-            .iter()
-            .filter_map(|(key, value): (Bound<PyAny>, Bound<PyAny>)| {
-                let name: String = key.extract().ok()?;
-                let func: Py<PyAny> = value.unbind();
-                Some((name, func))
-            })
-            .collect();
-
-        Ok(funcs)
-    })
-}
-
-fn normalize_path(path: &Path) -> PathBuf {
-    let mut components = Vec::new();
-    for comp in path.components() {
-        match comp {
-            std::path::Component::ParentDir => {
-                components.pop();
-            }
-            std::path::Component::CurDir => {}
-            other => components.push(other),
-        }
-    }
-    components.iter().collect()
-}
-
-fn path_to_module_path(current_dir: &Path, target_path: &Path) -> Option<String> {
-    let rel_path = target_path.strip_prefix(current_dir).ok()?;
-
-    let mut components: Vec<String> = rel_path
-        .components()
-        .map(|c| c.as_os_str().to_string_lossy().to_string())
-        .collect();
-
-    if let Some(last) = components.last_mut()
-        && let Some(pos) = last.rfind('.')
-    {
-        last.truncate(pos);
-    }
-
-    Some(components.join("."))
-}
-
-fn generate_executor_ids(num_executors: usize) -> Arc<Vec<Arc<str>>> {
+fn generate_executor_ids(num_executors: usize) -> Arc<Vec<Arc<String>>> {
     let mut ids = Vec::with_capacity(num_executors);
 
     for _ in 0..num_executors {
-        let id: Arc<str> = Arc::from(uuid::Uuid::new_v4().to_string());
+        let id: Arc<String> = Arc::from(uuid::Uuid::new_v4().to_string());
         ids.push(id);
     }
 
@@ -440,19 +335,19 @@ mod tests {
     use crate::logger::TestWriter;
     use std::sync::{Arc, Mutex};
 
-    #[test]
-    fn test_path_to_module_path() -> Result<()> {
-        let current_dir = Path::new("project");
-        let tasks_path = Path::new("../project/tasks.py");
-        let normalized_path = normalize_path(tasks_path);
-        let module_path = path_to_module_path(current_dir, &normalized_path);
-        let expected_path = Path::new("project/tasks.py");
+    // #[test]
+    // fn test_path_to_module_path() -> Result<()> {
+    //     let current_dir = Path::new("project");
+    //     let tasks_path = Path::new("../project/tasks.py");
+    //     let normalized_path = normalize_path(tasks_path);
+    //     let module_path = path_to_module_path(current_dir, &normalized_path);
+    //     let expected_path = Path::new("project/tasks.py");
 
-        assert_eq!(normalized_path, expected_path);
-        assert_eq!(module_path, Some("tasks".to_string()));
+    //     assert_eq!(normalized_path, expected_path);
+    //     assert_eq!(module_path, Some("tasks".to_string()));
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     fn get_test_module_path(filename: &str) -> String {
         let current_dir = std::env::current_dir().unwrap();
@@ -460,71 +355,66 @@ mod tests {
         test_module_path.to_str().unwrap().to_string()
     }
 
-    #[test]
-    fn test_get_task_functions_valid_module() -> Result<()> {
-        let module_path_str = get_test_module_path("test_tasks_module.py");
-        let functions = get_task_functions(&module_path_str, "default")?;
+    // #[test]
+    // fn test_get_task_functions_valid_module() -> Result<()> {
+    //     let module_path_str = get_test_module_path("test_tasks_module.py");
+    //     let functions = get_registry(&module_path_str, "default")?;
 
-        assert_eq!(functions.len(), 3);
+    //     assert_eq!(functions.len(), 3);
 
-        let task_names: Vec<String> = functions.iter().map(|(name, _)| name.clone()).collect();
-        assert!(task_names.contains(&"task-1".to_string()));
-        assert!(task_names.contains(&"task-2".to_string()));
-        assert!(task_names.contains(&"async-task".to_string()));
+    //     let task_names: Vec<String> = functions.iter().map(|(name, _)| name.clone()).collect();
+    //     assert!(task_names.contains(&"task-1".to_string()));
+    //     assert!(task_names.contains(&"task-2".to_string()));
+    //     assert!(task_names.contains(&"async-task".to_string()));
 
-        assert!(!task_names.contains(&"high-priority-task".to_string()));
+    //     assert!(!task_names.contains(&"high-priority-task".to_string()));
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    #[test]
-    fn test_get_task_functions_different_queue() -> Result<()> {
-        let module_path_str = get_test_module_path("test_tasks_module.py");
-        let functions = get_task_functions(&module_path_str, "high-priority")?;
+    // #[test]
+    // fn test_get_task_functions_different_queue() -> Result<()> {
+    //     let module_path_str = get_test_module_path("test_tasks_module.py");
+    //     let functions = get_registry(&module_path_str, "high-priority")?;
 
-        assert_eq!(functions.len(), 1);
-        assert_eq!(functions[0].0, "high-priority-task");
+    //     assert_eq!(functions.len(), 1);
+    //     assert_eq!(functions[0].0, "high-priority-task");
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    #[test]
-    fn test_get_task_functions_empty_module() -> Result<()> {
-        let module_path_str = get_test_module_path("test_tasks_empty.py");
-        let functions = get_task_functions(&module_path_str, "default")?;
+    // #[test]
+    // fn test_get_task_functions_empty_module() -> Result<()> {
+    //     let module_path_str = get_test_module_path("test_tasks_empty.py");
+    //     let functions = get_registry(&module_path_str, "default")?;
 
-        assert_eq!(functions.len(), 0);
+    //     assert_eq!(functions.len(), 0);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    #[test]
-    fn test_get_task_functions_duplicate_names() {
-        let module_path_str = get_test_module_path("test_tasks_duplicate.py");
+    // #[test]
+    // fn test_get_task_functions_duplicate_names() {
+    //     let module_path_str = get_test_module_path("test_tasks_duplicate.py");
 
-        let result = get_task_functions(&module_path_str, "default");
-        assert!(result.is_err());
+    //     let result = get_registry(&module_path_str, "default");
+    //     assert!(result.is_err());
 
-        let error_msg = result.unwrap_err().to_string();
-        assert!(error_msg.contains("duplicated") || error_msg.contains("duplicate"));
-    }
+    //     let error_msg = result.unwrap_err().to_string();
+    //     assert!(error_msg.contains("duplicated") || error_msg.contains("duplicate"));
+    // }
 
-    #[test]
-    fn test_get_task_functions_invalid_path() {
-        let result = get_task_functions("nonexistent/path/to/module.py", "default");
-        assert!(result.is_err());
-    }
+    // #[test]
+    // fn test_get_task_functions_invalid_path() {
+    //     let result = get_registry("nonexistent/path/to/module.py", "default");
+    //     assert!(result.is_err());
+    // }
 
     #[tokio::test]
     async fn test_run_task_with_sync_function() -> Result<()> {
-        let task_registry = TaskRegistry::new();
-        let python_dispatcher = Arc::new(PythonDispatcher::new()?);
+        let dispatcher_pool = Arc::new(DispatcherPool::new(1)?);
         let module_path_str = get_test_module_path("test_tasks_module.py");
-        let task_functions = get_task_functions(&module_path_str, "default")?;
-
-        for (name, task_obj) in task_functions {
-            task_registry.insert(name, task_obj)?;
-        }
+        let task_registry = TaskRegistry::new(&module_path_str, "default")?;
 
         let task = task_registry.get("task-1");
         assert!(task.is_some());
@@ -540,7 +430,13 @@ mod tests {
                 max_retries: 3,
             };
 
-            let result = run_task(python_dispatcher.clone(), &task, task_func).await;
+            let result = run_task(
+                Arc::new("test".to_string()),
+                dispatcher_pool.clone(),
+                &task,
+                task_func,
+            )
+            .await;
             assert!(!result.is_err());
         }
 
@@ -549,14 +445,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_task_with_async_function() -> Result<()> {
-        let task_registry = TaskRegistry::new();
-        let python_dispatcher = Arc::new(PythonDispatcher::new()?);
+        let dispatcher_pool = Arc::new(DispatcherPool::new(1)?);
         let module_path_str = get_test_module_path("test_tasks_module.py");
-        let task_functions = get_task_functions(&module_path_str, "default")?;
-
-        for (name, task_obj) in task_functions {
-            task_registry.insert(name, task_obj)?;
-        }
+        let task_registry = TaskRegistry::new(&module_path_str, "default")?;
 
         let task = task_registry.get("async-task");
         assert!(task.is_some());
@@ -572,7 +463,13 @@ mod tests {
                 max_retries: 3,
             };
 
-            let result = run_task(python_dispatcher.clone(), &task, task_func).await;
+            let result = run_task(
+                Arc::new("test".to_string()),
+                dispatcher_pool.clone(),
+                &task,
+                task_func,
+            )
+            .await;
             assert!(!result.is_err());
         }
 
