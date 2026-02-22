@@ -34,13 +34,15 @@ pub fn initial_logs(
     concurrency: usize,
     redis_url: &str,
     tasks_module_path: &str,
-    tasks: &Vec<&String>,
+    tasks: Vec<String>,
+    contexts: Vec<String>,
 ) {
     info!("Queue: {}", queue_name);
     info!("Concurrency: {}", concurrency);
     info!("Redis: {}", redis_url);
     info!("Tasks module: {}", tasks_module_path);
     info!("Tasks found: {:?}", tasks);
+    info!("Contexts found: {:?}", contexts);
     info!("Starting up the executors...");
 }
 
