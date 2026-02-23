@@ -1,5 +1,4 @@
 use anyhow::Result;
-use pyo3::{Py, PyAny};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -8,7 +7,7 @@ use tokio::task::JoinSet;
 
 use crate::logger::{Logger, initial_logs};
 use crate::redis_client::RedisClient;
-use crate::task::{PythonDispatcher, TaskRegistry};
+use crate::task::{PythonDispatcher, TaskData, TaskRegistry};
 use fluxqueue_common::{Task, deserialize_raw_task_data};
 
 pub async fn run_worker(
@@ -55,7 +54,7 @@ pub async fn run_worker(
             let task_registry = Arc::clone(&task_registry);
 
             async move {
-                let python_dispatcher = Arc::new(PythonDispatcher::new()?);
+                let python_dispatcher = Arc::new(PythonDispatcher::new(task_registry.clone())?);
 
                 redis_client
                     .register_executor(&queue_name, &executor_id)
@@ -169,7 +168,7 @@ async fn executor_loop(
                             raw_data.len()
                         ));
 
-                        let Some(task_function) = ctx.task_registry.get(&task.name) else {
+                        let Some(task_data) = ctx.task_registry.get_task(Arc::new(task.name.to_string())) else {
                             logger.warn(format_args!("Task '{}' not found in registry. Skipping", &task.name));
                             if let Err(e) = ctx.redis_client
                                 .remove_from_processing(&ctx.queue_name, &ctx.executor_id, &raw_data)
@@ -179,7 +178,7 @@ async fn executor_loop(
                             return Ok(());
                         };
 
-                        let task_result = run_task(ctx.executor_id.clone(), ctx.python_dispatcher.clone(), &task, task_function).await;
+                        let task_result = run_task(ctx.executor_id.clone(), ctx.python_dispatcher.clone(), &task, task_data.clone()).await;
 
                         match task_result {
                             Ok(_) => {
@@ -293,14 +292,14 @@ async fn run_task(
     executor_id: Arc<String>,
     python_dispatcher: Arc<PythonDispatcher>,
     task: &Task,
-    task_function: Arc<Py<PyAny>>,
+    task_data: Arc<TaskData>,
 ) -> Result<()> {
     let task_name = Arc::new(format!("{}:{}", &task.name, &task.id));
     let raw_args = Arc::new(task.args.clone());
     let raw_kwargs = Arc::new(task.kwargs.clone());
 
     python_dispatcher
-        .execute(executor_id, task_function, task_name, raw_args, raw_kwargs)
+        .execute(executor_id, task_data, task_name, raw_args, raw_kwargs)
         .await?;
 
     Ok(())
@@ -342,11 +341,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_task_with_sync_function() -> Result<()> {
-        let dispatcher_pool = Arc::new(PythonDispatcher::new()?);
         let module_path_str = get_test_module_path("test_tasks_module.py");
-        let task_registry = TaskRegistry::new(&module_path_str, "default")?;
+        let task_registry = Arc::new(TaskRegistry::new(&module_path_str, "default")?);
+        let dispatcher_pool = Arc::new(PythonDispatcher::new(task_registry.clone())?);
 
-        let task = task_registry.get("task-1");
+        let task = task_registry.get_task(Arc::new("task-1".to_string()));
         assert!(task.is_some());
 
         if let Some(task_func) = task {
@@ -375,11 +374,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_task_with_async_function() -> Result<()> {
-        let dispatcher_pool = Arc::new(PythonDispatcher::new()?);
         let module_path_str = get_test_module_path("test_tasks_module.py");
-        let task_registry = TaskRegistry::new(&module_path_str, "default")?;
+        let task_registry = Arc::new(TaskRegistry::new(&module_path_str, "default")?);
+        let dispatcher_pool = Arc::new(PythonDispatcher::new(task_registry.clone())?);
 
-        let task = task_registry.get("async-task");
+        let task = task_registry.get_task(Arc::new("async-task".to_string()));
         assert!(task.is_some());
 
         if let Some(task_func) = task {

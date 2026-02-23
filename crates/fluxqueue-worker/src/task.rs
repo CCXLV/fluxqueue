@@ -15,10 +15,19 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::logger::Logger;
 
+type Registry<T> = Arc<RwLock<HashMap<Arc<String>, T>>>;
+
+#[derive(Debug)]
+pub struct TaskData {
+    func: Arc<Py<PyAny>>,
+    context_name: Option<Arc<String>>,
+}
+
 #[derive(Debug)]
 pub struct TaskRegistry {
-    tasks: Arc<RwLock<HashMap<String, Arc<Py<PyAny>>>>>,
-    contexts: Arc<RwLock<HashMap<String, Arc<Py<PyAny>>>>>,
+    tasks: Registry<Arc<TaskData>>,
+    contexts: Registry<Arc<Py<PyAny>>>,
+    context_objects: Registry<Arc<Py<PyAny>>>,
 }
 
 impl TaskRegistry {
@@ -28,6 +37,7 @@ impl TaskRegistry {
         Ok(Self {
             tasks: Arc::new(RwLock::new(tasks)),
             contexts: Arc::new(RwLock::new(contexts)),
+            context_objects: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -43,15 +53,64 @@ impl TaskRegistry {
         Ok(context_names)
     }
 
-    pub fn get(&self, name: &str) -> Option<Arc<Py<PyAny>>> {
+    pub fn get_task(&self, name: Arc<String>) -> Option<Arc<TaskData>> {
         let tasks = self.tasks.read().ok()?;
-        tasks.get(name).cloned()
+        tasks.get(&name).cloned()
+    }
+
+    pub fn get_context(&self, name: Arc<String>) -> Option<Arc<Py<PyAny>>> {
+        let contexts = self.contexts.read().ok()?;
+        contexts.get(&name).cloned()
+    }
+
+    pub fn get_context_object(&self, name: Arc<String>) -> Option<Arc<Py<PyAny>>> {
+        let ctx_objects = self.context_objects.read().ok()?;
+        ctx_objects.get(&name).cloned()
+    }
+
+    pub fn get_task_context(&self, task_data: Arc<TaskData>) -> Result<Option<Arc<Py<PyAny>>>> {
+        let Some(context_name) = task_data.context_name.clone() else {
+            return Ok(None);
+        };
+
+        let context = self.get_context_object(context_name.clone());
+        if let Some(context) = context {
+            return Ok(Some(context.clone()));
+        }
+
+        let context_class = self.get_context(context_name.clone());
+
+        if let Some(context_class) = context_class {
+            Python::attach(|py| -> Result<Option<Arc<Py<PyAny>>>> {
+                let context = context_class.call0(py)?;
+                let context = Arc::new(context);
+
+                py.detach(|| -> Result<()> {
+                    let mut map = self.context_objects.write().map_err(|_| {
+                        anyhow!(
+                            "Internal Error: 'context_objects' lock poisoned (a thread panicked)"
+                        )
+                    })?;
+
+                    map.insert(context_name.clone(), context.clone());
+                    Ok(())
+                })?;
+
+                Ok(Some(context))
+            })
+        } else {
+            Err(anyhow!(
+                "Context '{}' wasn't found in the registry",
+                &context_name
+            ))
+        }
     }
 }
 
 struct TaskRequest {
+    task_registry: Arc<TaskRegistry>,
     executor_id: Arc<String>,
-    func: Arc<Py<PyAny>>,
+    task_data: Arc<TaskData>,
     task_name: Arc<String>,
     raw_args: Arc<Vec<u8>>,
     raw_kwargs: Arc<Vec<u8>>,
@@ -60,18 +119,20 @@ struct TaskRequest {
 
 pub struct PythonDispatcher {
     tx: mpsc::Sender<TaskRequest>,
+    task_registry: Arc<TaskRegistry>,
 }
 
 impl PythonDispatcher {
-    pub fn new() -> Result<Self> {
+    pub fn new(task_registry: Arc<TaskRegistry>) -> Result<Self> {
         let logical_cores = num_cpus::get();
         let (tx, mut rx) = mpsc::channel::<TaskRequest>(logical_cores * 2);
 
         let dispatcher = async move {
             while let Some(req) = rx.recv().await {
                 run_task(
+                    req.task_registry,
                     req.executor_id,
-                    req.func,
+                    req.task_data,
                     req.task_name,
                     req.raw_args,
                     req.raw_kwargs,
@@ -90,13 +151,13 @@ impl PythonDispatcher {
             });
         });
 
-        Ok(Self { tx })
+        Ok(Self { tx, task_registry })
     }
 
     pub async fn execute(
         &self,
         executor_id: Arc<String>,
-        func: Arc<Py<PyAny>>,
+        task_data: Arc<TaskData>,
         task_name: Arc<String>,
         raw_args: Arc<Vec<u8>>,
         raw_kwargs: Arc<Vec<u8>>,
@@ -105,8 +166,9 @@ impl PythonDispatcher {
 
         self.tx
             .send(TaskRequest {
+                task_registry: self.task_registry.clone(),
                 executor_id,
-                func,
+                task_data,
                 task_name,
                 raw_args,
                 raw_kwargs,
@@ -121,8 +183,9 @@ impl PythonDispatcher {
 }
 
 async fn run_task(
+    task_registry: Arc<TaskRegistry>,
     executor_id: Arc<String>,
-    task_function: Arc<Py<PyAny>>,
+    task_data: Arc<TaskData>,
     task_name: Arc<String>,
     raw_args: Arc<Vec<u8>>,
     raw_kwargs: Arc<Vec<u8>>,
@@ -139,11 +202,13 @@ async fn run_task(
         &task_name
     ))?;
 
+    let context = task_registry.get_task_context(task_data.clone())?;
+
     let maybe_coro = Python::attach(|py| -> Result<Option<Py<PyAny>>> {
         let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
         let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
 
-        let args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
+        let mut args_tuple = if let Ok(list) = py_args.cast::<PyList>() {
             list.to_tuple()
         } else if let Ok(tuple) = py_args.cast::<PyTuple>() {
             tuple.clone()
@@ -151,11 +216,22 @@ async fn run_task(
             anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
         };
 
+        if let Some(context) = context {
+            let context = context.as_any();
+            let prefix = PyTuple::new(py, &[context])?;
+
+            let new_tuple = prefix.add(args_tuple.clone())?;
+            if let Ok(tuple) = new_tuple.cast::<PyTuple>() {
+                args_tuple = tuple.clone();
+            }
+        }
+
         let kwargs_dict = py_kwargs
             .cast_into::<PyDict>()
             .map_err(|_| anyhow!("Kwargs must be a map/dict"))?;
 
-        let result = task_function
+        let result = task_data
+            .func
             .call(py, args_tuple, Some(&kwargs_dict))
             .map_err(|e| anyhow!("Failed to call Python function: {:?}", e))?;
 
@@ -204,8 +280,8 @@ async fn run_task(
 }
 
 type TasksAndContexts = (
-    HashMap<String, Arc<Py<PyAny>>>,
-    HashMap<String, Arc<Py<PyAny>>>,
+    HashMap<Arc<String>, Arc<TaskData>>,
+    HashMap<Arc<String>, Arc<Py<PyAny>>>,
 );
 
 fn get_registry(module_path: &str, queue_name: &str) -> Result<TasksAndContexts> {
@@ -250,20 +326,32 @@ fn get_registry(module_path: &str, queue_name: &str) -> Result<TasksAndContexts>
             .cast_into::<PyDict>()
             .map_err(|_| anyhow!("Failed to cast result to a Python Dictionary"))?;
 
-        let tasks: HashMap<String, Arc<Py<PyAny>>> = registry
+        let tasks: HashMap<Arc<String>, Arc<TaskData>> = registry
             .get_item("tasks")?
             .expect("tasks missing")
             .cast::<PyDict>()
             .map_err(|e| anyhow!("tasks is not a dict: {}", e))?
             .iter()
-            .filter_map(|(key, value)| {
-                let name: String = key.extract().ok()?;
-                let func: Py<PyAny> = value.unbind();
-                Some((name, Arc::new(func)))
-            })
-            .collect();
+            .map(
+                |(key, value)| -> Result<(Arc<String>, Arc<TaskData>), anyhow::Error> {
+                    let name: String = key.extract()?;
+                    let data = value.cast::<PyDict>().map_err(|e| anyhow!(e.to_string()))?;
 
-        let contexts: HashMap<String, Arc<Py<PyAny>>> = registry
+                    let func = data
+                        .get_item("func")?
+                        .ok_or_else(|| anyhow!("Couldn't get the function"))?;
+                    let func = Arc::new(func.unbind());
+
+                    let context_name = data
+                        .get_item("context_name")?
+                        .map(|c| Arc::new(c.unbind().to_string()));
+
+                    Ok((Arc::new(name), Arc::new(TaskData { func, context_name })))
+                },
+            )
+            .collect::<Result<HashMap<_, _>, _>>()?;
+
+        let contexts: HashMap<Arc<String>, Arc<Py<PyAny>>> = registry
             .get_item("contexts")?
             .expect("contexts missing")
             .cast::<PyDict>()
@@ -272,7 +360,7 @@ fn get_registry(module_path: &str, queue_name: &str) -> Result<TasksAndContexts>
             .filter_map(|(key, value): (Bound<PyAny>, Bound<PyAny>)| {
                 let name: String = key.extract().ok()?;
                 let func: Py<PyAny> = value.unbind();
-                Some((name, Arc::new(func)))
+                Some((Arc::new(name), Arc::new(func)))
             })
             .collect();
 
@@ -344,12 +432,12 @@ mod tests {
 
         assert_eq!(tasks.len(), 3);
 
-        let task_names: Vec<String> = tasks.iter().map(|(name, _)| name.clone()).collect();
-        assert!(task_names.contains(&"task-1".to_string()));
-        assert!(task_names.contains(&"task-2".to_string()));
-        assert!(task_names.contains(&"async-task".to_string()));
+        let task_names: Vec<Arc<String>> = tasks.iter().map(|(name, _)| name.clone()).collect();
+        assert!(task_names.contains(&Arc::new("task-1".to_string())));
+        assert!(task_names.contains(&Arc::new("task-2".to_string())));
+        assert!(task_names.contains(&Arc::new("async-task".to_string())));
 
-        assert!(!task_names.contains(&"high-priority-task".to_string()));
+        assert!(!task_names.contains(&Arc::new("high-priority-task".to_string())));
 
         Ok(())
     }
@@ -359,9 +447,9 @@ mod tests {
         let module_path_str = get_test_module_path("test_tasks_module.py");
         let (tasks, _) = get_registry(&module_path_str, "high-priority")?;
 
-        let task_names: Vec<String> = tasks.iter().map(|(name, _)| name.clone()).collect();
+        let task_names: Vec<Arc<String>> = tasks.iter().map(|(name, _)| name.clone()).collect();
         assert_eq!(tasks.len(), 1);
-        assert!(task_names.contains(&"high-priority-task".to_string()));
+        assert!(task_names.contains(&Arc::new("high-priority-task".to_string())));
 
         Ok(())
     }

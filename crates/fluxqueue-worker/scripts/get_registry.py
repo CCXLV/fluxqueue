@@ -2,6 +2,9 @@ import importlib
 import inspect
 import sys
 from pathlib import Path
+from typing import get_type_hints
+
+from fluxqueue import Context
 
 
 def get_registry(module_path: str, queue: str, module_dir: str | None = None):
@@ -23,12 +26,31 @@ def get_registry(module_path: str, queue: str, module_dir: str | None = None):
                 raise ValueError(f"Task '{task_name}' is duplicated")
 
             original_func = getattr(obj, "__wrapped__", obj)
-            registry["tasks"][task_name] = original_func
+
+            hints = get_type_hints(original_func)
+            sig = inspect.signature(original_func)
+            context_params = {
+                name: hints[name]
+                for name in sig.parameters
+                if name in hints
+                and isinstance(hints[name], type)
+                and issubclass(hints[name], Context)
+            }
+            if not context_params:
+                context_name = None
+            else:
+                context = context_params[next(iter(context_params))]
+                context_name = getattr(context, "__fluxqueue_context__", None)
+
+            registry["tasks"][task_name] = {
+                "func": original_func,
+                "context_name": context_name
+            }
         elif inspect.isclass(obj):
-            context_name = getattr(obj, "__fluxqueue_context__", None)
-            if not context_name:
+            if not issubclass(obj, Context):
                 continue
 
+            context_name = getattr(obj, "__fluxqueue_context__", None)
             if registry["contexts"].get(context_name):
                 raise ValueError(f"Context '{context_name}' is duplicated")
 
