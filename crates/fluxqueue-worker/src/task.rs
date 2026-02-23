@@ -218,7 +218,7 @@ async fn run_task(
 
         if let Some(context) = context {
             let context = context.as_any();
-            let prefix = PyTuple::new(py, &[context])?;
+            let prefix = PyTuple::new(py, [context])?;
 
             let new_tuple = prefix.add(args_tuple.clone())?;
             if let Ok(tuple) = new_tuple.cast::<PyTuple>() {
