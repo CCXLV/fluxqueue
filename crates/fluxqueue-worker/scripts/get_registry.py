@@ -44,7 +44,7 @@ def get_registry(module_path: str, queue: str, module_dir: str | None = None):
 
             registry["tasks"][task_name] = {
                 "func": original_func,
-                "context_name": context_name
+                "context_name": context_name,
             }
         elif inspect.isclass(obj):
             if not issubclass(obj, Context):

@@ -1,4 +1,5 @@
 import inspect
+import threading
 from collections.abc import Callable, Coroutine
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast, get_type_hints, overload
 
@@ -11,12 +12,18 @@ P = ParamSpec("P")
 class Context:
     __fluxqueue_context__: str | None = None
 
+    def __init__(self) -> None:
+        self._thread_local = threading.local()
+
+    @property
+    def thread_storage(self) -> dict[str, Any]:
+        if not hasattr(self._thread_local, "storage"):
+            self._thread_local.storage = {}
+        return self._thread_local.storage
+
     def __init_subclass__(cls) -> None:
         if not cls.__fluxqueue_context__:
             cls.__fluxqueue_context__ = cls.__name__
-            # raise NotImplementedError(
-            #     f"{cls.__name__} is not implemented properly, make sure to add '__fluxqueue_context__' attribute."
-            # )
 
 
 C = TypeVar("C", bound=Context)
