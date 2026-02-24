@@ -83,14 +83,9 @@ def _with_context(
 
     new_sig = sig.replace(parameters=[sig.parameters[n] for n in non_context_params])
 
-    if inspect.iscoroutinefunction(func):
-        wrapper = _task_decorator(
-            cast(Any, func), name=name, queue=queue, max_retries=max_retries, core=core
-        )
-    else:
-        wrapper = _task_decorator(
-            cast(Any, func), name=name, queue=queue, max_retries=max_retries, core=core
-        )
+    wrapper = _task_decorator(
+        cast(Any, func), name=name, queue=queue, max_retries=max_retries, core=core
+    )
 
     cast(Any, wrapper).__signature__ = new_sig
     return wrapper
