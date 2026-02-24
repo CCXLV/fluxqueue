@@ -8,26 +8,33 @@ dynamic = ["version"]
 description = "A lightweight, resource-efficient, high-throughput task queue for Python, written in Rust."
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
-keywords = ["task-queue", "queue", "redis", "async", "background-tasks", "worker", "rust", "fluxqueue"]
+keywords = [
+  "task-queue",
+  "queue",
+  "redis",
+  "async",
+  "background-tasks",
+  "worker",
+  "rust",
+  "fluxqueue",
+]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-authors = [
-    {name = "Giorgi Merebashvili", email = "mereba2627@gmail.com"}
-]
+authors = [{ name = "Giorgi Merebashvili", email = "mereba2627@gmail.com" }]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Intended Audience :: Developers",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Programming Language :: Rust",
-    "Operating System :: OS Independent",
-    "Topic :: Software Development :: Libraries",
-    "Topic :: System :: Distributed Computing",
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Rust",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: System :: Distributed Computing",
 ]
 
 [project.urls]
@@ -39,19 +46,9 @@ Changelog = "https://github.com/CCXLV/fluxqueue/releases"
 
 [project.optional-dependencies]
 dev = ["ruff"]
-tests = [
-    "pytest-asyncio",
-    "python-dotenv",
-    "redis"
-]
-cli = [
-    "fluxqueue-cli>=0.1.0b4"
-]
-docs = [
-    "mkdocs-material", 
-    "mkdocstrings",
-    "mkdocstrings-python",
-]
+tests = ["pytest-asyncio", "python-dotenv", "redis"]
+cli = ["fluxqueue-cli>=0.1.0b4"]
+docs = ["mkdocs-material", "mkdocstrings", "mkdocstrings-python"]
 build = ["maturin"]
 
 [tool.maturin]
