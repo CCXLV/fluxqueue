@@ -24,7 +24,10 @@ pub async fn run_worker(
     })?;
     let redis_client = Arc::new(redis_client);
 
-    let task_registry = Arc::new(TaskRegistry::new(&tasks_module_path, &queue_name)?);
+    let task_registry = Arc::new(TaskRegistry::new(&tasks_module_path, &queue_name).map_err(|e| {
+        tracing::error!("{}", e);
+        std::process::exit(1);
+    })?);
     let registered_tasks = task_registry.get_registered_tasks()?;
     let registered_contexts = task_registry.get_registered_contexts()?;
 
