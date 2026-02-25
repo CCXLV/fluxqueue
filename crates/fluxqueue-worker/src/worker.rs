@@ -24,10 +24,12 @@ pub async fn run_worker(
     })?;
     let redis_client = Arc::new(redis_client);
 
-    let task_registry = Arc::new(TaskRegistry::new(&tasks_module_path, &queue_name).map_err(|e| {
-        tracing::error!("{}", e);
-        std::process::exit(1);
-    })?);
+    let task_registry = Arc::new(TaskRegistry::new(&tasks_module_path, &queue_name).map_err(
+        |e| {
+            tracing::error!("{}", e);
+            std::process::exit(1);
+        },
+    )?);
     let registered_tasks = task_registry.get_registered_tasks()?;
     let registered_contexts = task_registry.get_registered_contexts()?;
 
@@ -164,6 +166,7 @@ async fn executor_loop(
                     Ok(Some(raw_data)) => {
                         let task = deserialize_raw_task_data(&raw_data)?;
                         let task_name = format!("{}:{}", &task.name, &task.id);
+                        let actual_task_name = task.name.clone();
 
                         logger.info(format_args!(
                             "Received a task '{}' with a total of {} Bytes",
@@ -181,7 +184,7 @@ async fn executor_loop(
                             return Ok(());
                         };
 
-                        let task_result = run_task(ctx.executor_id.clone(), ctx.python_dispatcher.clone(), &task, task_data.clone()).await;
+                        let task_result = run_task(ctx.executor_id.clone(), ctx.python_dispatcher.clone(), Arc::new(task), task_data.clone()).await;
 
                         match task_result {
                             Ok(_) => {
@@ -195,7 +198,7 @@ async fn executor_loop(
                                 if let Err(err) = ctx.redis_client
                                     .mark_as_failed(&ctx.queue_name, &ctx.executor_id, &raw_data)
                                     .await {
-                                        logger.error(format_args!("Failed to mark the task '{}' as failed: {}", &task.name, err));
+                                        logger.error(format_args!("Failed to mark the task '{}' as failed: {}", actual_task_name, err));
                                 }
                             }
                         }
@@ -294,15 +297,13 @@ async fn janitor_loop(
 async fn run_task(
     executor_id: Arc<String>,
     python_dispatcher: Arc<PythonDispatcher>,
-    task: &Task,
+    task: Arc<Task>,
     task_data: Arc<TaskData>,
 ) -> Result<()> {
     let task_name = Arc::new(format!("{}:{}", &task.name, &task.id));
-    let raw_args = Arc::new(task.args.clone());
-    let raw_kwargs = Arc::new(task.kwargs.clone());
 
     python_dispatcher
-        .execute(executor_id, task_data, task_name, raw_args, raw_kwargs)
+        .execute(executor_id, task_data, task_name, task)
         .await?;
 
     Ok(())
@@ -365,7 +366,7 @@ mod tests {
             let result = run_task(
                 Arc::new("test".to_string()),
                 dispatcher_pool.clone(),
-                &task,
+                Arc::new(task),
                 task_func,
             )
             .await;
@@ -398,7 +399,7 @@ mod tests {
             let result = run_task(
                 Arc::new("test".to_string()),
                 dispatcher_pool.clone(),
-                &task,
+                Arc::new(task),
                 task_func,
             )
             .await;

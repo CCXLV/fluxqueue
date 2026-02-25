@@ -1,10 +1,12 @@
 import inspect
+import threading
 from collections.abc import Callable, Coroutine
 from contextvars import ContextVar
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast, get_type_hints, overload
 
 from ._core import FluxQueueCore
 from ._task import _task_decorator
+from .models import TaskMetadata
 
 P = ParamSpec("P")
 
@@ -13,28 +15,47 @@ class Context:
     __fluxqueue_context__: str | None = None
 
     def __init__(self) -> None:
-        self._thread_storage: ContextVar[dict[str, Any]] = ContextVar(
-            "thread_storage", default=None
+        self._thread_local = threading.local()
+        self._metadata_var: ContextVar[TaskMetadata] = ContextVar(
+            "task_metadata", default=None
         )
 
     @property
     def thread_storage(self) -> dict[str, Any]:
         """
-        Context-scoped storage dictionary.
+        Retrieves the thread-persistent storage dictionary.
 
-        Returns a mutable dictionary associated with the current
-        execution context. The storage is isolated per thread or
-        async task using ContextVar, ensuring safe concurrent usage.
-
-        The dictionary is initialized lazily on first access.
+        Returns a dictionary that persists across all tasks executed by the current worker.
+        Used for storing long-lived resources like database engines and connection
+        pools to avoid re-initialization overhead.
         """
-        storage = self._thread_storage.get(None)
+        if not hasattr(self._thread_local, "storage"):
+            self._thread_local.storage = {}
 
-        if storage is None:
-            storage = {}
-            self._thread_storage.set(storage)
+        return self._thread_local.storage
 
-        return storage
+    @property
+    def metadata(self) -> TaskMetadata:
+        """
+        Returns metadata isolated to the current task.
+
+        Returns a TaskMetadata instance containing execution details like
+        retry counts and task IDs. This property uses ContextVars to ensure
+        data isolation during concurrent task execution on the same thread.
+        """
+        return self._metadata_var.get()
+
+    async def _run_async_task(
+        self, func: Callable, metadata: TaskMetadata, args, kwargs
+    ):
+        """
+        This function is for internal use only.
+        """
+        token = self._metadata_var.set(metadata)
+        try:
+            await func(*args, **kwargs)
+        finally:
+            self._metadata_var.reset(token)
 
     def __init_subclass__(cls) -> None:
         if not cls.__fluxqueue_context__:

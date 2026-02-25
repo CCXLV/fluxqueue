@@ -45,14 +45,13 @@ def _task_decorator(
     if return_type and return_type is not type(None):
         raise TypeError(f"Task function must return None, got {return_type}")
 
-    is_async = inspect.iscoroutinefunction(func)
     task_name = get_task_name(func, name)
 
     # TODO: Add unique identifier 'fluxqueue' just to be 100% sure
     cast(Any, func).task_name = task_name
     cast(Any, func).queue = queue
 
-    if is_async:
+    if inspect.iscoroutinefunction(func):
 
         @wraps(func)
         async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, anyhow};
+use fluxqueue_common::Task;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyList, PyModule, PyTuple};
@@ -112,8 +113,7 @@ struct TaskRequest {
     executor_id: Arc<String>,
     task_data: Arc<TaskData>,
     task_name: Arc<String>,
-    raw_args: Arc<Vec<u8>>,
-    raw_kwargs: Arc<Vec<u8>>,
+    task: Arc<Task>,
     resp_tx: oneshot::Sender<Result<()>>,
 }
 
@@ -134,8 +134,7 @@ impl PythonDispatcher {
                     req.executor_id,
                     req.task_data,
                     req.task_name,
-                    req.raw_args,
-                    req.raw_kwargs,
+                    req.task,
                 )
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
@@ -159,8 +158,7 @@ impl PythonDispatcher {
         executor_id: Arc<String>,
         task_data: Arc<TaskData>,
         task_name: Arc<String>,
-        raw_args: Arc<Vec<u8>>,
-        raw_kwargs: Arc<Vec<u8>>,
+        task: Arc<Task>,
     ) -> Result<()> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
@@ -170,8 +168,7 @@ impl PythonDispatcher {
                 executor_id,
                 task_data,
                 task_name,
-                raw_args,
-                raw_kwargs,
+                task,
                 resp_tx,
             })
             .await
@@ -182,29 +179,39 @@ impl PythonDispatcher {
     }
 }
 
+struct CoroWithContext {
+    args: Py<PyTuple>,
+    kwargs: Py<PyDict>,
+    context: Arc<Py<PyAny>>,
+}
+
+struct MaybeCoro {
+    func: Arc<Py<PyAny>>,
+    with_context: Option<CoroWithContext>,
+}
+
 async fn run_task(
     task_registry: Arc<TaskRegistry>,
     executor_id: Arc<String>,
     task_data: Arc<TaskData>,
     task_name: Arc<String>,
-    raw_args: Arc<Vec<u8>>,
-    raw_kwargs: Arc<Vec<u8>>,
+    task: Arc<Task>,
 ) -> Result<()> {
     let logger = Logger::new(format!("EXECUTOR {}", &executor_id));
     let duration_start = Instant::now();
 
-    let task_args: Value = from_slice(&raw_args).context(format!(
+    let task_args: Value = from_slice(&task.args).context(format!(
         "Failed to deserialize task '{}' function args",
         &task_name
     ))?;
-    let task_kwargs: Value = from_slice(&raw_kwargs).context(format!(
+    let task_kwargs: Value = from_slice(&task.kwargs).context(format!(
         "Failed to deserialize task '{}' function kwargs",
         &task_name
     ))?;
 
     let context = task_registry.get_task_context(task_data.clone())?;
 
-    let maybe_coro = Python::attach(|py| -> Result<Option<Py<PyAny>>> {
+    let maybe_coro = Python::attach(|py| -> Result<Option<MaybeCoro>> {
         let py_args = pythonize(py, &task_args).context("Failed to pythonize args")?;
         let py_kwargs = pythonize(py, &task_kwargs).context("Failed to pythonize kwargs")?;
 
@@ -216,7 +223,11 @@ async fn run_task(
             anyhow::bail!("Args must be an array/tuple, found {}", py_args.get_type());
         };
 
-        if let Some(context) = context {
+        if let Some(context) = context.as_ref() {
+            let task_metadata = get_task_metadata(py, task.clone())?;
+            let metadata_var = context.getattr(py, "_metadata_var")?;
+            metadata_var.call_method1(py, "set", (task_metadata,))?;
+
             let context = context.as_any();
             let prefix = PyTuple::new(py, [context])?;
 
@@ -230,19 +241,25 @@ async fn run_task(
             .cast_into::<PyDict>()
             .map_err(|_| anyhow!("Kwargs must be a map/dict"))?;
 
-        let result = task_data
-            .func
-            .call(py, args_tuple, Some(&kwargs_dict))
-            .map_err(|e| anyhow!("Failed to call Python function: {:?}", e))?;
-
-        let bound_result = result.bind(py);
-        let is_coroutine = bound_result
-            .hasattr("__await__")
-            .map_err(|_| anyhow!("Failed to check if result is awaitable"))?;
+        let is_coroutine = is_coroutine(py, task_data.func.clone())?;
 
         if is_coroutine {
-            Ok(Some(result))
+            let with_context = context.map(|context| CoroWithContext {
+                args: args_tuple.unbind(),
+                kwargs: kwargs_dict.unbind(),
+                context,
+            });
+
+            Ok(Some(MaybeCoro {
+                func: task_data.func.clone(),
+                with_context,
+            }))
         } else {
+            task_data
+                .func
+                .call(py, args_tuple.clone(), Some(&kwargs_dict))
+                .map_err(|e| anyhow!("Failed to call Python function: {:?}", e))?;
+
             let duration_end = duration_start.elapsed();
             logger.info(format_args!(
                 "Task '{}' successfully finished in {}ms",
@@ -264,8 +281,27 @@ async fn run_task(
         anyhow!(e.to_string())
     })?;
 
-    if let Some(coro) = maybe_coro {
-        let fut = Python::attach(|py| into_future(coro.into_bound(py)))?;
+    if let Some(maybe_coro) = maybe_coro {
+        let fut = Python::attach(|py| {
+            if let Some(with_context) = maybe_coro.with_context {
+                let task_metadata = get_task_metadata(py, task.clone())
+                    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+                let result = with_context.context.call_method1(
+                    py,
+                    "_run_async_task",
+                    (
+                        maybe_coro.func.as_any(),
+                        task_metadata,
+                        with_context.args,
+                        Some(with_context.kwargs),
+                    ),
+                )?;
+                into_future(result.into_bound(py))
+            } else {
+                let func = maybe_coro.func.clone_ref(py);
+                into_future(func.into_bound(py))
+            }
+        })?;
         fut.await?;
 
         let duration_end = duration_start.elapsed();
@@ -368,6 +404,30 @@ fn get_registry(module_path: &str, queue_name: &str) -> Result<TasksAndContexts>
     })?;
 
     Ok(result)
+}
+
+fn get_task_metadata(py: Python<'_>, task: Arc<Task>) -> Result<Py<PyAny>> {
+    let module = py.import("fluxqueue.models")?.unbind();
+    let task_metadata = module.call_method1(
+        py,
+        "TaskMetadata",
+        (
+            task.id.clone(),
+            task.retries,
+            task.max_retries,
+            task.created_at,
+        ),
+    )?;
+
+    Ok(task_metadata)
+}
+
+fn is_coroutine(py: Python<'_>, func: Arc<Py<PyAny>>) -> Result<bool> {
+    let inspect = py.import("inspect")?;
+    let is_coro: bool = inspect
+        .call_method1("iscoroutinefunction", (func.as_any(),))?
+        .extract()?;
+    Ok(is_coro)
 }
 
 fn normalize_path(path: &Path) -> PathBuf {
