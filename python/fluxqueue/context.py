@@ -1,6 +1,6 @@
 import inspect
-import threading
 from collections.abc import Callable, Coroutine
+from contextvars import ContextVar
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast, get_type_hints, overload
 
 from ._core import FluxQueueCore
@@ -13,13 +13,28 @@ class Context:
     __fluxqueue_context__: str | None = None
 
     def __init__(self) -> None:
-        self._thread_local = threading.local()
+        self._thread_storage: ContextVar[dict[str, Any]] = ContextVar(
+            "thread_storage", default=None
+        )
 
     @property
     def thread_storage(self) -> dict[str, Any]:
-        if not hasattr(self._thread_local, "storage"):
-            self._thread_local.storage = {}
-        return self._thread_local.storage
+        """
+        Context-scoped storage dictionary.
+
+        Returns a mutable dictionary associated with the current
+        execution context. The storage is isolated per thread or
+        async task using ContextVar, ensuring safe concurrent usage.
+
+        The dictionary is initialized lazily on first access.
+        """
+        storage = self._thread_storage.get(None)
+
+        if storage is None:
+            storage = {}
+            self._thread_storage.set(storage)
+
+        return storage
 
     def __init_subclass__(cls) -> None:
         if not cls.__fluxqueue_context__:
