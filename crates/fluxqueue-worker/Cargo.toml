@@ -12,6 +12,7 @@ name = "fluxqueue-worker"
 path = "src/main.rs"
 
 [dependencies]
+pyo3 = { version = "0.27.2", features = ["auto-initialize"] }
 pyo3-async-runtimes = { version = "0.27.0", features = ["tokio-runtime"] }
 uuid = { version = "1.20.0", features = ["v4"] }
 redis = "0.32.7"
@@ -22,12 +23,15 @@ tokio = { version = "1.49.0", features = [
   "signal",
   "time",
 ] }
-pyo3 = { version = "0.27.2", features = ["auto-initialize"] }
 rmp-serde = "1.3.1"
 rmpv = { version = "1.3.1", features = ["with-serde"] }
 serde = { version = "1.0.228", features = ["derive"] }
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "time"] }
+tracing-subscriber = { version = "0.3.22", features = [
+  "env-filter",
+  "fmt",
+  "time",
+] }
 time = { version = "0.3.47", features = ["local-offset", "macros"] }
 clap = { version = "4.5.56", features = ["derive", "env"] }
 anyhow = "1.0.100"

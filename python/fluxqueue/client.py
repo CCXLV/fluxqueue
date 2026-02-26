@@ -1,10 +1,9 @@
-import inspect
 from collections.abc import Callable, Coroutine
-from functools import wraps
-from typing import Any, ParamSpec, cast, get_type_hints, overload
+from typing import Any, Concatenate, ParamSpec, cast, overload
 
 from ._core import FluxQueueCore
-from .utils import get_task_name
+from ._task import _task_decorator
+from .context import C, _with_context
 
 P = ParamSpec("P")
 
@@ -62,35 +61,40 @@ class FluxQueue:
         def decorator(
             func: Callable[P, None | Coroutine[Any, Any, None]],
         ) -> Callable[P, None | Coroutine[Any, Any, None]]:
-            type_hints = get_type_hints(func)
-            return_type = type_hints.get("return")
+            return _task_decorator(
+                cast(Any, func),
+                name=name,
+                queue=queue,
+                max_retries=max_retries,
+                core=self._core,
+            )
 
-            if return_type and return_type is not type(None):
-                raise TypeError(f"Task function must return None, got {return_type}")
+        return decorator
 
-            is_async = inspect.iscoroutinefunction(func)
-            task_name = get_task_name(func, name)
+    def task_with_context(
+        self,
+        *,
+        name: str | None = None,
+        queue: str = "default",
+        max_retries: int = 3,
+    ):
+        @overload
+        def decorator(func: Callable[Concatenate[C, P], None]) -> Callable[P, None]: ...
 
-            cast(Any, func).task_name = task_name
-            cast(Any, func).queue = queue
+        @overload
+        def decorator(
+            func: Callable[Concatenate[C, P], Coroutine[Any, Any, None]],
+        ) -> Callable[P, Coroutine[Any, Any, None]]: ...
 
-            if is_async:
-
-                @wraps(func)
-                async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
-                    await self._core._enqueue_async(
-                        task_name, queue, max_retries, args, kwargs
-                    )
-                    return None
-
-                return async_wrapper
-            else:
-
-                @wraps(func)
-                def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
-                    self._core._enqueue(task_name, queue, max_retries, args, kwargs)
-                    return None
-
-                return sync_wrapper
+        def decorator(
+            func: Callable[Concatenate[C, P], None | Coroutine[Any, Any, None]],
+        ) -> Callable[P, None | Coroutine[Any, Any, None]]:
+            return _with_context(
+                cast(Any, func),
+                name=name,
+                queue=queue,
+                max_retries=max_retries,
+                core=self._core,
+            )
 
         return decorator

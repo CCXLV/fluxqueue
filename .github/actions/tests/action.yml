@@ -13,12 +13,9 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-
     - name: Install dependencies
       shell: bash -euxo pipefail {0}
-      run: uv sync --extra tests
+      run: pip install -e .[tests]
 
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
@@ -29,5 +26,5 @@ runs:
     - name: Run Tests
       shell: bash -euxo pipefail {0}
       run: |
-        uv run pytest tests/
+        pytest tests/
         cargo test --workspace --locked
