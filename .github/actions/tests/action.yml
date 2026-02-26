@@ -29,6 +29,8 @@ runs:
     - name: Run Tests
       shell: bash -euxo pipefail {0}
       run: |
+        pytest tests/
+          
         LIB_DIR=$(python3 -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))")
     
         if [[ "$RUNNER_OS" == "macOS" ]]; then
@@ -37,6 +39,6 @@ runs:
             export LD_LIBRARY_PATH="$LIB_DIR:${LD_LIBRARY_PATH:-}"
         fi
     
-        export PYTHONPATH="$(pwd)/python:$PYTHONPATH"
+        source ./venv/bin/activate
     
         cargo test --workspace --locked -- --nocapture
