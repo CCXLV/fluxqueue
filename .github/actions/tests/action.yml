@@ -18,9 +18,7 @@ runs:
 
     - name: Install dependencies
       shell: bash -euxo pipefail {0}
-      run: |
-          python3 -m venv .venv
-          uv sync --extra tests
+      run: pip install -e .[tests]
 
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
@@ -31,5 +29,5 @@ runs:
     - name: Run Tests
       shell: bash -euxo pipefail {0}
       run: |
-        uv run pytest tests/
-        uv run cargo test --workspace --locked
+        pytest tests/
+        cargo test --workspace --locked
