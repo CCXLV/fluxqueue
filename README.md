@@ -93,7 +93,7 @@ Running the async function in an async context will also enqueue the task.
 
 ## Installing the worker
 
-In order the tasks to be executed you need to run a FluxQueue worker. You need to install the worker on your system, recommended way of doing that is using `fluxqueue-worker`:
+In order the tasks to be executed you need to run a FluxQueue worker. You need to install the worker on your system, recommended way of doing that is using `fluxqueue-cli` which comes with the `[cli]` extra:
 
 ```bash
 fluxqueue worker install
