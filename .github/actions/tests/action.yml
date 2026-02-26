@@ -30,5 +30,6 @@ runs:
       shell: bash -euxo pipefail {0}
       run: |
         uv run pytest tests/
-        source ./scripts/set_ld_path.sh
+        LIB_DIR=$(python3 -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))")
+        export LD_LIBRARY_PATH="$LIB_DIR:$LD_LIBRARY_PATH"
         cargo test --workspace --locked
