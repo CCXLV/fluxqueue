@@ -30,4 +30,5 @@ runs:
       shell: bash -euxo pipefail {0}
       run: |
         uv run pytest tests/
+        ./scripts/set_ld_path.sh
         cargo test --workspace --locked
