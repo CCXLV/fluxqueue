@@ -32,14 +32,11 @@ runs:
         uv run pytest tests/
     
         LIB_DIR=$(python3 -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))")
-        PYTHON_PREFIX=$(python3 -c "import sys; print(sys.prefix)")
     
         if [[ "$RUNNER_OS" == "macOS" ]]; then
             export DYLD_LIBRARY_PATH="$LIB_DIR:${DYLD_LIBRARY_PATH:-}"
         else
             export LD_LIBRARY_PATH="$LIB_DIR:${LD_LIBRARY_PATH:-}"
         fi
-    
-        export PYTHONHOME="$PYTHON_PREFIX"
     
         cargo test --workspace --locked -- --nocapture
