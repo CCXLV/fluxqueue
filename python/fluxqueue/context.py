@@ -16,9 +16,7 @@ class Context:
 
     def __init__(self) -> None:
         self._thread_local = threading.local()
-        self._metadata_var: ContextVar[TaskMetadata] = ContextVar(
-            "task_metadata", default=None
-        )
+        self._metadata_var: ContextVar[TaskMetadata] = ContextVar("task_metadata")
 
     @property
     def thread_storage(self) -> dict[str, Any]:

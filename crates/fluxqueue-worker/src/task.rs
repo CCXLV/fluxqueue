@@ -100,10 +100,7 @@ impl TaskRegistry {
                 Ok(Some(context))
             })
         } else {
-            Err(anyhow!(
-                "Context '{}' wasn't found in the registry",
-                &context_name
-            ))
+            Ok(None)
         }
     }
 }
@@ -179,15 +176,11 @@ impl PythonDispatcher {
     }
 }
 
-struct CoroWithContext {
-    args: Py<PyTuple>,
-    kwargs: Py<PyDict>,
-    context: Arc<Py<PyAny>>,
-}
-
 struct MaybeCoro {
     func: Arc<Py<PyAny>>,
-    with_context: Option<CoroWithContext>,
+    args: Py<PyTuple>,
+    kwargs: Py<PyDict>,
+    context: Option<Arc<Py<PyAny>>>,
 }
 
 async fn run_task(
@@ -244,15 +237,11 @@ async fn run_task(
         let is_coroutine = is_coroutine(py, task_data.func.clone())?;
 
         if is_coroutine {
-            let with_context = context.map(|context| CoroWithContext {
+            Ok(Some(MaybeCoro {
+                func: task_data.func.clone(),
                 args: args_tuple.unbind(),
                 kwargs: kwargs_dict.unbind(),
                 context,
-            });
-
-            Ok(Some(MaybeCoro {
-                func: task_data.func.clone(),
-                with_context,
             }))
         } else {
             task_data
@@ -283,23 +272,28 @@ async fn run_task(
 
     if let Some(maybe_coro) = maybe_coro {
         let fut = Python::attach(|py| {
-            if let Some(with_context) = maybe_coro.with_context {
+            if let Some(context) = maybe_coro.context {
                 let task_metadata = get_task_metadata(py, task.clone())
                     .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-                let result = with_context.context.call_method1(
+                let result = context.call_method1(
                     py,
                     "_run_async_task",
                     (
                         maybe_coro.func.as_any(),
                         task_metadata,
-                        with_context.args,
-                        Some(with_context.kwargs),
+                        maybe_coro.args,
+                        Some(maybe_coro.kwargs),
                     ),
                 )?;
                 into_future(result.into_bound(py))
             } else {
-                let func = maybe_coro.func.clone_ref(py);
-                into_future(func.into_bound(py))
+                let result = maybe_coro
+                    .func
+                    .call(py, maybe_coro.args, Some(maybe_coro.kwargs.bind(py)))
+                    .map_err(|e| anyhow!("Failed to call Python function: {:?}", e))
+                    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+                into_future(result.into_bound(py))
             }
         })?;
         fut.await?;
