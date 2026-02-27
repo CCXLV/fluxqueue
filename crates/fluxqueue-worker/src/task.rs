@@ -381,7 +381,7 @@ fn get_registry(module_path: &str, queue_name: &str) -> Result<TasksAndContexts>
             )
             .collect::<Result<HashMap<_, _>, _>>()?;
 
-        let contexts: HashMap<Arc<String>, Arc<Py<PyAny>>> = registry
+        let mut contexts: HashMap<Arc<String>, Arc<Py<PyAny>>> = registry
             .get_item("contexts")?
             .expect("contexts missing")
             .cast::<PyDict>()
@@ -389,10 +389,13 @@ fn get_registry(module_path: &str, queue_name: &str) -> Result<TasksAndContexts>
             .iter()
             .filter_map(|(key, value): (Bound<PyAny>, Bound<PyAny>)| {
                 let name: String = key.extract().ok()?;
-                let func: Py<PyAny> = value.unbind();
-                Some((Arc::new(name), Arc::new(func)))
+                let class: Py<PyAny> = value.unbind();
+                Some((Arc::new(name), Arc::new(class)))
             })
             .collect();
+
+        let (base_name, base_class) = get_base_context_class(py)?;
+        contexts.insert(base_name, base_class);
 
         Ok((tasks, contexts))
     })?;
@@ -414,6 +417,15 @@ fn get_task_metadata(py: Python<'_>, task: Arc<Task>) -> Result<Py<PyAny>> {
     )?;
 
     Ok(task_metadata)
+}
+
+fn get_base_context_class(py: Python<'_>) -> Result<(Arc<String>, Arc<Py<PyAny>>)> {
+    let module = py.import("fluxqueue.context")?;
+    let context_class = module.getattr("Context")?;
+    Ok((
+        Arc::new("_Context".to_string()),
+        Arc::new(context_class.unbind()),
+    ))
 }
 
 fn is_coroutine(py: Python<'_>, func: Arc<Py<PyAny>>) -> Result<bool> {
