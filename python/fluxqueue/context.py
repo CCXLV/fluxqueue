@@ -29,7 +29,7 @@ class Context:
     to provide domain-specific resources.
     """
 
-    __fluxqueue_context__: str | None = None
+    __fluxqueue_context__ = "_Context"
 
     def __init__(self) -> None:
         self._thread_local = threading.local()
@@ -73,7 +73,7 @@ class Context:
             self._metadata_var.reset(token)
 
     def __init_subclass__(cls) -> None:
-        if not cls.__fluxqueue_context__:
+        if not cls.__fluxqueue_context__ or cls.__fluxqueue_context__ == "_Context":
             cls.__fluxqueue_context__ = cls.__name__
 
 
