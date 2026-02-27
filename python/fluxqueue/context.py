@@ -12,6 +12,23 @@ P = ParamSpec("P")
 
 
 class Context:
+    """
+    Base execution context for FluxQueue tasks.
+
+    Provides a dual-layer storage system designed for high-performance
+    distributed task execution:
+
+    - Worker Layer (`thread_storage`): Persists across the lifetime of an
+        individual worker thread. Use this for heavy resource pooling
+        (e.g., DB engines, HTTP clients) to avoid re-initialization overhead.
+    - Task Layer (`metadata`): Isolated to a single task execution via
+        ContextVars. Provides read-only access to the current task's
+        unique identity and execution state.
+
+    This class can be used directly for basic metadata access or subclassed
+    to provide domain-specific resources.
+    """
+
     __fluxqueue_context__: str | None = None
 
     def __init__(self) -> None:
