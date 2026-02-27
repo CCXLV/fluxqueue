@@ -32,9 +32,8 @@ class FluxQueue:
         """
         Mark a function as a FluxQueue task.
 
-        This returns a decorator. When you apply it to a function, calling that
-        function will enqueue a task in Redis instead of running the function
-        immediately. The actual work is done later by the worker.
+        When you apply to a function that function is being marked as a task function.
+        Running it will enqueue the task and then the worker will execute it.
 
         Parameters
         ----------
@@ -48,6 +47,28 @@ class FluxQueue:
         `max_retries`:
             Maximum number of retries the worker will attempt for this task
             before treating it as dead.
+
+        Example
+        ---
+
+        ```py
+        @fluxqueue.task()
+        async def send_email_task(name: str, username: str, email: str):
+            async with get_email_client() as client:
+                await send_email(
+                    email_client=client,
+                    to_email=email,
+                    subject="Welcome to FluxQueue",
+                    config=email_config,
+                )
+        ```
+
+        Enqueueing the task
+        ---
+
+        ```py
+        await send_email_task(name, username, email)
+        ```
         """
 
         @overload
@@ -78,6 +99,68 @@ class FluxQueue:
         queue: str = "default",
         max_retries: int = 3,
     ):
+        """
+        Mark a function as a FluxQueue task with context.
+
+        This decorator works like the `task` decorator but adds support for the `Context` class.
+        The function must accept a context as its first argument, with `Context` (or a subclass of `Context`) as the type hint.
+        When decorated, the context argument is automatically injected by the worker and is no longer
+        part of the function's public signature - users calling the function do not need to provide it.
+
+        Parameters
+        ----------
+        `name`:
+            Optional explicit task name. If not set, a name is derived from the
+            function name.
+
+        `queue`:
+            Name of the queue to push tasks to. Defaults to `"default"`.
+
+        `max_retries`:
+            Maximum number of retries the worker will attempt for this task
+            before treating it as dead.
+
+        Example
+        ---
+
+        ```py
+        class DbContext(Context):
+            def __init__(self) -> None:
+                super().__init__()
+
+            def _get_local_session(self) -> async_sessionmaker[AsyncSession]:
+                if not self.thread_storage.get("session"):
+                    engine = create_async_engine(SQLALCHEMY_DATABASE_URL)
+                    self.thread_storage["session"] = async_sessionmaker(
+                        bind=engine, expire_on_commit=False
+                    )
+
+                return self.thread_storage["session"]
+
+            @asynccontextmanager
+            async def session_context(self):
+                local_session = self._get_local_session()
+                async with local_session() as session:
+                    try:
+                        yield session
+                        await session.commit()
+                    except Exception:
+                        await session.rollback()
+                        raise
+
+        @fluxqueue.task_with_context()
+        async def create_user_task(ctx: DbContext, email: str, username: str):
+            async with ctx.session_context() as db_session:
+                user = User(
+                    email=email,
+                    username=username
+                )
+                db_session.add(user)
+
+        await create_user_task
+        ```
+        """
+
         @overload
         def decorator(func: Callable[Concatenate[C, P], None]) -> Callable[P, None]: ...
 
