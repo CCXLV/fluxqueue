@@ -79,12 +79,7 @@ class Context:
         if cls.__name__ == "_Context":
             raise ValueError("Context subclass cannot be named '_Context'")
 
-        if cls.__fluxqueue_context__ == "_Context":
-            raise ValueError(
-                f"'__fluxqueue_context__' on {cls.__name__} cannot be named '_Context'"
-            )
-
-        if not cls.__fluxqueue_context__:
+        if not cls.__fluxqueue_context__ or cls.__fluxqueue_context__ == "_Context":
             cls.__fluxqueue_context__ = cls.__name__
 
 
