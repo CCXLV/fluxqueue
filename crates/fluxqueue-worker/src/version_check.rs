@@ -19,12 +19,12 @@ fn parse_part(part: &str) -> (u32, i32, u32) {
 
     let number = digits.parse().unwrap_or(0);
 
-    let (ptype, pnum) = if suffix.starts_with("rc") {
-        (2, suffix[2..].parse().unwrap_or(0))
-    } else if suffix.starts_with('b') {
-        (1, suffix[1..].parse().unwrap_or(0))
-    } else if suffix.starts_with('a') {
-        (0, suffix[1..].parse().unwrap_or(0))
+    let (ptype, pnum) = if let Some(stripped) = suffix.strip_prefix("rc") {
+        (2, stripped.parse().unwrap_or(0))
+    } else if let Some(stripped) = suffix.strip_prefix('b') {
+        (1, stripped.parse().unwrap_or(0))
+    } else if let Some(stripped) = suffix.strip_prefix('a') {
+        (0, stripped.parse().unwrap_or(0))
     } else {
         (3, 0) // stable
     };
