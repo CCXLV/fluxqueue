@@ -65,6 +65,9 @@ class Context:
     ):
         """
         This function is for internal use only.
+
+        This function is used to run an async task if it has context,
+        which also sets and then resets its metadata.
         """
         token = self._metadata_var.set(metadata)
         try:
