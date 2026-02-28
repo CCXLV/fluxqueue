@@ -12,8 +12,6 @@ use crate::redis_client::RedisClient;
 use crate::task::{PythonDispatcher, TaskData, TaskRegistry};
 use fluxqueue_common::{Task, deserialize_raw_task_data};
 
-static MIN_CLIENT_LIB_VERSION: &str = "0.3.0";
-
 pub async fn run_worker(
     mut shutdown: watch::Receiver<bool>,
     concurrency: usize,
@@ -347,11 +345,13 @@ fn check_client_library_version() -> Result<()> {
         Ok(version.to_string())
     })?;
 
-    let comparison = compare_versions(MIN_CLIENT_LIB_VERSION, &library_version);
+    let worker_version = env!("CARGO_PKG_VERSION");
+
+    let comparison = compare_versions(worker_version, &library_version);
     if comparison == -1 {
         tracing::warn!(
             "Worker version '{}' is older than client library '{}'. For full functionality, update the worker to match the client version.",
-            MIN_CLIENT_LIB_VERSION,
+            worker_version,
             &library_version
         );
     }
@@ -359,7 +359,7 @@ fn check_client_library_version() -> Result<()> {
     if comparison == 1 {
         return Err(anyhow!(
             "Minimum required client library version is: {}, found: {}",
-            MIN_CLIENT_LIB_VERSION,
+            worker_version,
             &library_version
         ));
     }
