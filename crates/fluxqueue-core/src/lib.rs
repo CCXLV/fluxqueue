@@ -76,6 +76,7 @@ impl FluxQueueCore {
 
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_class::<FluxQueueCore>()?;
     Ok(())
 }

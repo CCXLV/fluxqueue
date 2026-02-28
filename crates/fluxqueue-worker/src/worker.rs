@@ -1,4 +1,6 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use pyo3::Python;
+use pyo3::types::PyAnyMethods;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -18,6 +20,11 @@ pub async fn run_worker(
     queue_name: String,
     save_dead_tasks: bool,
 ) -> Result<()> {
+    check_client_library_version().map_err(|e| {
+        tracing::error!("{}", e);
+        std::process::exit(1);
+    })?;
+
     let redis_client = RedisClient::new(&redis_url).await.map_err(|e| {
         tracing::error!("{}", e);
         std::process::exit(1);
@@ -329,6 +336,53 @@ fn check_worker_is_ready(ready_check: ReadyCheck) {
         );
         tracing::info!("{}", "-".repeat(65));
     }
+}
+
+fn check_client_library_version() -> Result<()> {
+    let worker_version = env!("CARGO_PKG_VERSION");
+    let library_version = Python::attach(|py| -> Result<String> {
+        let module = py.import("fluxqueue")?;
+        let version = module.getattr("__version__")?;
+        Ok(version.to_string())
+    })?;
+
+    let comparison = compare_versions(worker_version, &library_version);
+    if comparison == -1 {
+        tracing::warn!(
+            "Worker version '{}' is older than client library '{}'. For full functionality, update the worker to match the client version.",
+            worker_version,
+            &library_version
+        );
+    }
+
+    if comparison == 1 {
+        return Err(anyhow!(
+            "Minimum required client library version is: {}, found: {}",
+            worker_version,
+            &library_version
+        ));
+    }
+
+    Ok(())
+}
+
+fn compare_versions(v1: &str, v2: &str) -> i8 {
+    let mut parts1: Vec<u32> = v1.split('.').map(|p| p.parse().unwrap_or(0)).collect();
+    let mut parts2: Vec<u32> = v2.split('.').map(|p| p.parse().unwrap_or(0)).collect();
+
+    let len = parts1.len().max(parts2.len());
+    parts1.resize(len, 0);
+    parts2.resize(len, 0);
+
+    for (a, b) in parts1.iter().zip(parts2.iter()) {
+        if a > b {
+            return 1;
+        }
+        if a < b {
+            return -1;
+        }
+    }
+    0
 }
 
 #[cfg(test)]
