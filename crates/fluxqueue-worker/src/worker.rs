@@ -346,7 +346,7 @@ fn check_client_library_version() -> Result<()> {
         Ok(version.to_string())
     })?;
 
-    let comparison = compare_versions(worker_version, &library_version);
+    let comparison = crate::version_check::compare_versions(worker_version, &library_version);
 
     if comparison == -1 {
         return Err(anyhow!(
@@ -365,25 +365,6 @@ fn check_client_library_version() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn compare_versions(v1: &str, v2: &str) -> i8 {
-    let mut parts1: Vec<u32> = v1.split('.').map(|p| p.parse().unwrap_or(0)).collect();
-    let mut parts2: Vec<u32> = v2.split('.').map(|p| p.parse().unwrap_or(0)).collect();
-
-    let len = parts1.len().max(parts2.len());
-    parts1.resize(len, 0);
-    parts2.resize(len, 0);
-
-    for (a, b) in parts1.iter().zip(parts2.iter()) {
-        if a > b {
-            return 1;
-        }
-        if a < b {
-            return -1;
-        }
-    }
-    0
 }
 
 #[cfg(test)]
