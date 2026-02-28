@@ -7,7 +7,9 @@ from typing import get_type_hints
 from fluxqueue import Context
 
 
-def get_registry(module_path: str, queue: str, module_dir: str | None = None):
+def get_registry(  # noqa: C901
+    module_path: str, queue: str, module_dir: str | None = None
+):
     if module_dir:
         module_dir_path = Path(module_dir).resolve()
         if str(module_dir_path) not in sys.path:

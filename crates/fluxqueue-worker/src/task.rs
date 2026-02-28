@@ -50,7 +50,11 @@ impl TaskRegistry {
 
     pub fn get_registered_contexts(&self) -> Result<Vec<String>> {
         let contexts = self.contexts.read().map_err(|e| anyhow!(e.to_string()))?;
-        let context_names: Vec<_> = contexts.iter().map(|t| t.0.to_string()).collect();
+        let context_names: Vec<_> = contexts
+            .iter()
+            .filter(|(name, _)| name.as_str() != "_Context")
+            .map(|(name, _)| name.to_string())
+            .collect();
         Ok(context_names)
     }
 
