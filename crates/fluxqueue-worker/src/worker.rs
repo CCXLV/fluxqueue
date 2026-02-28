@@ -347,14 +347,15 @@ fn check_client_library_version() -> Result<()> {
     })?;
 
     let comparison = compare_versions(worker_version, &library_version);
+
     if comparison == -1 {
-        tracing::warn!(
-            "Worker version '{}' is older than client library '{}'. For full functionality, update the worker to match the client version.",
+        return Err(anyhow!(
+            "Worker version '{}' is older than client library '{}'. \
+            Worker might not work properly, update the worker to match the client version.",
             worker_version,
             &library_version
-        );
+        ));
     }
-
     if comparison == 1 {
         return Err(anyhow!(
             "Minimum required client library version is: {}, found: {}",
