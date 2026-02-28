@@ -58,7 +58,7 @@ manifest-path = "crates/fluxqueue-core/Cargo.toml"
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [
