@@ -1,5 +1,7 @@
 from typing import Any
 
+__version__: str
+
 class FluxQueueCore:
     """
     High-performance task queue backed by Rust.
