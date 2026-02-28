@@ -1,6 +1,4 @@
-from typing import Any, TypeVar
-
-T = TypeVar("T")
+from typing import Any
 
 class FluxQueueCore:
     """
