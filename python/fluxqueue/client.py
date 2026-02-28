@@ -148,14 +148,13 @@ class FluxQueue:
                         await session.rollback()
                         raise
 
+
         @fluxqueue.task_with_context()
         async def create_user_task(ctx: DbContext, email: str, username: str):
             async with ctx.session_context() as db_session:
-                user = User(
-                    email=email,
-                    username=username
-                )
+                user = User(email=email, username=username)
                 db_session.add(user)
+
 
         await create_user_task
         ```
