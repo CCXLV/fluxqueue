@@ -339,13 +339,12 @@ fn check_worker_is_ready(ready_check: ReadyCheck) {
 }
 
 fn check_client_library_version() -> Result<()> {
+    let worker_version = env!("CARGO_PKG_VERSION");
     let library_version = Python::attach(|py| -> Result<String> {
         let module = py.import("fluxqueue")?;
         let version = module.getattr("__version__")?;
         Ok(version.to_string())
     })?;
-
-    let worker_version = env!("CARGO_PKG_VERSION");
 
     let comparison = compare_versions(worker_version, &library_version);
     if comparison == -1 {
