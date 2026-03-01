@@ -29,6 +29,7 @@ FluxQueue is a task queue for Python that gets out of your way. The Rust core ma
 - **Multiple Queues**: Organize tasks across different queues
 - **Simple API**: Decorator-based interface that feels natural in Python
 - **Type Safe**: Full type hints support
+- **Context Classes**: Access task metadata and manage thread-persistent resources with the Context class
 
 ## Requirements
 
@@ -90,6 +91,69 @@ async def send_email(to_email: str, subject: str, body: str):
 ```
 
 Running the async function in an async context will also enqueue the task.
+
+### Tasks with Context
+
+FluxQueue provides a `Context` class that gives you access to task metadata and allows you to manage thread-persistent resources. Use `task_with_context()` decorator to enable this feature:
+
+```python
+from fluxqueue import FluxQueue, Context
+
+fluxqueue = FluxQueue()
+
+@fluxqueue.task_with_context()
+def process_data(ctx: Context, data: str):
+    # Access task metadata
+    print(f"Task ID: {ctx.metadata.task_id}")
+    print(f"Retry count: {ctx.metadata.retries}")
+
+    # Process the data
+    process(data)
+```
+
+You can also subclass `Context` to create custom contexts with domain-specific resources:
+
+```python
+from contextlib import asynccontextmanager
+from fluxqueue import FluxQueue, Context
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+
+class DbContext(Context):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def _get_local_session(self):
+        if "session" not in self.thread_storage:
+            engine = create_async_engine(DATABASE_URL)
+            self.thread_storage["session"] = async_sessionmaker(
+                bind=engine, expire_on_commit=False
+            )
+        return self.thread_storage["session"]
+
+    @asynccontextmanager
+    async def session_context(self):
+        local_session = self._get_local_session()
+        async with local_session() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+@fluxqueue.task_with_context()
+async def create_user(ctx: DbContext, email: str, username: str):
+    async with ctx.session_context() as db_session:
+        user = User(email=email, username=username)
+        db_session.add(user)
+```
+
+The context parameter is automatically injected by the worker and is not part of the function's public signature when enqueueing:
+
+```python
+# Just call with your regular arguments
+create_user("user@example.com", "johndoe")
+```
 
 ## Installing the worker
 
