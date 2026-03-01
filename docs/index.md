@@ -19,7 +19,7 @@ Welcome to FluxQueue documentation. FluxQueue is a lightweight, resource-efficie
 
 ## What is FluxQueue?
 
-FluxQueue is a task queue for Python that gets out of your way. The Rust core makes the process fast with less overhead, least dependencies, and most importantly, less memory usage. Tasks are managed through Redis.
+FluxQueue is a task queue for Python that gets out of your way. Built on a multi-threaded Tokio runtime, FluxQueue delivers high throughput while maintaining low memory usage. The Rust core ensures minimal overhead and dependencies, making it an efficient solution for background task processing. Tasks are managed through Redis.
 
 ## Key Features
 
@@ -31,6 +31,7 @@ FluxQueue is a task queue for Python that gets out of your way. The Rust core ma
 - **Multiple Queues**: Organize tasks across different queues
 - **Simple API**: Decorator-based interface that feels natural in Python
 - **Type Safe**: Full type hints support
+- **Context Classes**: Access task metadata and manage thread-persistent resources with the Context class
 
 ## Requirements
 
