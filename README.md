@@ -17,7 +17,7 @@
 
 ## Overview
 
-FluxQueue is a task queue for Python that gets out of your way. The Rust core makes the process fast with less overhead, least dependencies, and most importantly, less memory usage. Tasks are managed through Redis.
+FluxQueue is a task queue for Python that gets out of your way. Built on a multi-threaded Tokio runtime, FluxQueue delivers high throughput while maintaining low memory usage. The Rust core ensures minimal overhead and dependencies, making it an efficient solution for background task processing. Tasks are managed through Redis.
 
 ## Key Features
 
@@ -90,16 +90,15 @@ from fluxqueue import FluxQueue, Context
 fluxqueue = FluxQueue()
 
 @fluxqueue.task_with_context()
-def process_data(ctx: Context, data: str):
+def process_data_task(ctx: Context, data: str):
     # Access task metadata
     print(f"Task ID: {ctx.metadata.task_id}")
     print(f"Retry count: {ctx.metadata.retries}")
 
-    # Process the data
-    process(data)
+    process_data(data)
 ```
 
-You can also subclass `Context` to create custom contexts with domain-specific resources:
+You can also subclass `Context` to create custom contexts with domain-specific resources. This example shows how to create a `DbContext` that manages database connections efficiently by reusing them across tasks in the same worker thread:
 
 ```python
 from contextlib import asynccontextmanager
@@ -130,7 +129,7 @@ class DbContext(Context):
                 raise
 
 @fluxqueue.task_with_context()
-async def create_user(ctx: DbContext, email: str, username: str):
+async def create_user_task(ctx: DbContext, email: str, username: str):
     async with ctx.session_context() as db_session:
         user = User(email=email, username=username)
         db_session.add(user)
@@ -140,7 +139,7 @@ The context parameter is automatically injected by the worker and is not part of
 
 ```python
 # Just call with your regular arguments
-create_user("user@example.com", "johndoe")
+create_user_task("user@example.com", "johndoe")
 ```
 
 ## Installing the worker
