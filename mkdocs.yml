@@ -60,6 +60,9 @@ plugins:
 
 nav:
   - FluxQueue: index.md
+  - Features:
+      - features/index.md
+      - features/context.md
   - Learn:
       - tutorial/index.md
       - tutorial/installation.md
@@ -80,6 +83,7 @@ nav:
       - api/fluxqueue.md
       - api/environment.md
   - About: about.md
+  - Release Notes: release-notes.md
 
 markdown_extensions:
   - pymdownx.highlight:

@@ -10,7 +10,7 @@ class TaskMetadata:
 
     task_id: str
     """Unique identifier for the current task execution."""
-    retry_count: int
+    retries: int
     """Number of times this task has been retried."""
     max_retries: int
     """Maximum number of retry attempts allowed before failure."""
