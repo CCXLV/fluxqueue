@@ -78,7 +78,7 @@ FluxQueue supports async functions too. Just define an async function and use th
 
 ```python
 @fluxqueue.task()
-async def send_email(data: dict):
+async def send_email(to_email: str, subject: str, body: str):
     async with email_context() as email_client:
         message = EmailMessage()
         message["From"] = "test@example.com"

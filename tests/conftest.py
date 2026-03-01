@@ -17,8 +17,8 @@ TestEnvFixture = Annotated[TestEnv, pytest.fixture]
 
 @pytest.fixture
 def test_env():
-    redis_client: Redis = Redis()
-    fluxqueue: FluxQueue = FluxQueue()
+    redis_client = Redis()
+    fluxqueue = FluxQueue()
 
     try:
         yield TestEnv(fluxqueue=fluxqueue, redis_client=redis_client)

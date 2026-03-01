@@ -346,7 +346,7 @@ fn check_client_library_version() -> Result<()> {
         Ok(version.to_string())
     })?;
 
-    let comparison = compare_versions(worker_version, &library_version);
+    let comparison = crate::version_check::compare_versions(worker_version, &library_version);
 
     if comparison == -1 {
         return Err(anyhow!(
@@ -365,25 +365,6 @@ fn check_client_library_version() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn compare_versions(v1: &str, v2: &str) -> i8 {
-    let mut parts1: Vec<u32> = v1.split('.').map(|p| p.parse().unwrap_or(0)).collect();
-    let mut parts2: Vec<u32> = v2.split('.').map(|p| p.parse().unwrap_or(0)).collect();
-
-    let len = parts1.len().max(parts2.len());
-    parts1.resize(len, 0);
-    parts2.resize(len, 0);
-
-    for (a, b) in parts1.iter().zip(parts2.iter()) {
-        if a > b {
-            return 1;
-        }
-        if a < b {
-            return -1;
-        }
-    }
-    0
 }
 
 #[cfg(test)]
@@ -445,6 +426,105 @@ mod tests {
                 id: "test-id".to_string(),
                 name: "name".to_string(),
                 args: vec![0x92, 0x01, 0x02], // (1, 2)
+                kwargs: vec![128],
+                created_at: 0,
+                retries: 0,
+                max_retries: 3,
+            };
+
+            let result = run_task(
+                Arc::new("test".to_string()),
+                dispatcher_pool.clone(),
+                Arc::new(task),
+                task_func,
+            )
+            .await;
+            assert!(!result.is_err());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_sync_task_with_context() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_with_context.py");
+        let task_registry = Arc::new(TaskRegistry::new(&module_path_str, "default")?);
+        let dispatcher_pool = Arc::new(PythonDispatcher::new(task_registry.clone())?);
+
+        let task = task_registry.get_task(Arc::new("sync-func-with-context".to_string()));
+        assert!(task.is_some());
+
+        if let Some(task_func) = task {
+            let task = Task {
+                id: "test-id".to_string(),
+                name: "name".to_string(),
+                args: vec![144],
+                kwargs: vec![128],
+                created_at: 0,
+                retries: 0,
+                max_retries: 3,
+            };
+
+            let result = run_task(
+                Arc::new("test".to_string()),
+                dispatcher_pool.clone(),
+                Arc::new(task),
+                task_func,
+            )
+            .await;
+            assert!(!result.is_err());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_async_task_with_context() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_with_context.py");
+        let task_registry = Arc::new(TaskRegistry::new(&module_path_str, "default")?);
+        let dispatcher_pool = Arc::new(PythonDispatcher::new(task_registry.clone())?);
+
+        let task = task_registry.get_task(Arc::new("async-func-with-context".to_string()));
+        assert!(task.is_some());
+
+        if let Some(task_func) = task {
+            let task = Task {
+                id: "test-id".to_string(),
+                name: "name".to_string(),
+                args: vec![144],
+                kwargs: vec![128],
+                created_at: 0,
+                retries: 0,
+                max_retries: 3,
+            };
+
+            let result = run_task(
+                Arc::new("test".to_string()),
+                dispatcher_pool.clone(),
+                Arc::new(task),
+                task_func,
+            )
+            .await;
+            assert!(!result.is_err());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_task_with_custom_context() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_with_context.py");
+        let task_registry = Arc::new(TaskRegistry::new(&module_path_str, "default")?);
+        let dispatcher_pool = Arc::new(PythonDispatcher::new(task_registry.clone())?);
+
+        let task = task_registry.get_task(Arc::new("test-custom-context".to_string()));
+        assert!(task.is_some());
+
+        if let Some(task_func) = task {
+            let task = Task {
+                id: "test-id".to_string(),
+                name: "name".to_string(),
+                args: vec![144],
                 kwargs: vec![128],
                 created_at: 0,
                 retries: 0,
