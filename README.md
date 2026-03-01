@@ -52,15 +52,9 @@ from fluxqueue import FluxQueue
 fluxqueue = FluxQueue()
 
 @fluxqueue.task()
-def send_email(to_email: str, subject: str, body: str):
+def send_email(to_email: str):
     with email_context() as email_client:
-        message = EmailMessage()
-        message["From"] = "test@example.com"
-        message["To"] = to_email
-        message["Subject"] = subject
-        message.set_content(body)
-
-        email_client.send_message(message)
+        send_email(to_email, email_client)
 ```
 
 ### Enqueue Tasks
@@ -79,15 +73,9 @@ FluxQueue supports async functions too. Just define an async function and use th
 
 ```python
 @fluxqueue.task()
-async def send_email(to_email: str, subject: str, body: str):
+async def send_email_task(to_email: str):
     async with email_context() as email_client:
-        message = EmailMessage()
-        message["From"] = "test@example.com"
-        message["To"] = to_email
-        message["Subject"] = subject
-        message.set_content(body)
-
-        await email_client.send_message(message)
+        await send_email(to_email, email_client)
 ```
 
 Running the async function in an async context will also enqueue the task.
