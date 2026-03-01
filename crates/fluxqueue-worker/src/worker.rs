@@ -445,6 +445,105 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn test_sync_task_with_context() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_with_context.py");
+        let task_registry = Arc::new(TaskRegistry::new(&module_path_str, "default")?);
+        let dispatcher_pool = Arc::new(PythonDispatcher::new(task_registry.clone())?);
+
+        let task = task_registry.get_task(Arc::new("sync-func-with-context".to_string()));
+        assert!(task.is_some());
+
+        if let Some(task_func) = task {
+            let task = Task {
+                id: "test-id".to_string(),
+                name: "name".to_string(),
+                args: vec![144],
+                kwargs: vec![128],
+                created_at: 0,
+                retries: 0,
+                max_retries: 3,
+            };
+
+            let result = run_task(
+                Arc::new("test".to_string()),
+                dispatcher_pool.clone(),
+                Arc::new(task),
+                task_func,
+            )
+            .await;
+            assert!(!result.is_err());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_async_task_with_context() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_with_context.py");
+        let task_registry = Arc::new(TaskRegistry::new(&module_path_str, "default")?);
+        let dispatcher_pool = Arc::new(PythonDispatcher::new(task_registry.clone())?);
+
+        let task = task_registry.get_task(Arc::new("async-func-with-context".to_string()));
+        assert!(task.is_some());
+
+        if let Some(task_func) = task {
+            let task = Task {
+                id: "test-id".to_string(),
+                name: "name".to_string(),
+                args: vec![144],
+                kwargs: vec![128],
+                created_at: 0,
+                retries: 0,
+                max_retries: 3,
+            };
+
+            let result = run_task(
+                Arc::new("test".to_string()),
+                dispatcher_pool.clone(),
+                Arc::new(task),
+                task_func,
+            )
+            .await;
+            assert!(!result.is_err());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_task_with_custom_context() -> Result<()> {
+        let module_path_str = get_test_module_path("test_tasks_with_context.py");
+        let task_registry = Arc::new(TaskRegistry::new(&module_path_str, "default")?);
+        let dispatcher_pool = Arc::new(PythonDispatcher::new(task_registry.clone())?);
+
+        let task = task_registry.get_task(Arc::new("test-custom-context".to_string()));
+        assert!(task.is_some());
+
+        if let Some(task_func) = task {
+            let task = Task {
+                id: "test-id".to_string(),
+                name: "name".to_string(),
+                args: vec![144],
+                kwargs: vec![128],
+                created_at: 0,
+                retries: 0,
+                max_retries: 3,
+            };
+
+            let result = run_task(
+                Arc::new("test".to_string()),
+                dispatcher_pool.clone(),
+                Arc::new(task),
+                task_func,
+            )
+            .await;
+            assert!(!result.is_err());
+        }
+
+        Ok(())
+    }
+
     async fn enqueue_tasks(redis_url: &str) -> Result<()> {
         use deadpool_redis::{Config, Runtime};
         use fluxqueue_common::{
