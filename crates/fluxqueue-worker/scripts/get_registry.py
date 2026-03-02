@@ -19,8 +19,14 @@ def get_registry(  # noqa: C901
     registry = {"tasks": {}, "contexts": {}}
     for _name, obj in inspect.getmembers(module):
         if inspect.isfunction(obj):
+            is_fluxqueue_task = getattr(obj, "fluxqueue", False)
+
+            if not is_fluxqueue_task:
+                continue
+
             task_name = getattr(obj, "task_name", None)
             task_queue = getattr(obj, "queue", None)
+
             if not task_queue or task_queue != queue:
                 continue
 
