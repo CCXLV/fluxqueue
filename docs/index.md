@@ -15,6 +15,7 @@ Welcome to FluxQueue documentation. FluxQueue is a lightweight, resource-efficie
 - [Worker Setup](tutorial/worker.md) - Deploy and run workers
 - [How it Works](how-it-works/index.md) - Learn more about how FluxQueue actually works
 - [Examples](examples/index.md) - FluxQueue examples with **Flask**, **Django**, **FastAPI**
+- [Features](features/index.md) - Features of FluxQueue
 - [API Reference](api/index.md) - Complete API documentation
 
 ## What is FluxQueue?

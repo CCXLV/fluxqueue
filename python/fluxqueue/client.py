@@ -108,7 +108,7 @@ class FluxQueue:
         part of the function's public signature - users calling the function do not need to provide it.
 
         Parameters
-        ----------
+        ---
         `name`:
             Optional explicit task name. If not set, a name is derived from the
             function name.
@@ -120,10 +120,20 @@ class FluxQueue:
             Maximum number of retries the worker will attempt for this task
             before treating it as dead.
 
-        Example
+        Example: Subclassing Context for Database Resource Pooling
         ---
+        This example demonstrates how to use `thread_storage` to persist a
+        SQLAlchemy engine across the lifetime of a worker thread. This pattern
+        prevents the overhead of recreating database connection pools for
+        every individual task execution.
 
         ```py
+        from fluxqueue import FluxQueue, Context
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+        from contextlib import asynccontextmanager
+
+        fluxqueue = FluxQueue()
+
         class DbContext(Context):
             def __init__(self) -> None:
                 super().__init__()
@@ -148,15 +158,13 @@ class FluxQueue:
                         await session.rollback()
                         raise
 
-
         @fluxqueue.task_with_context()
         async def create_user_task(ctx: DbContext, email: str, username: str):
             async with ctx.session_context() as db_session:
                 user = User(email=email, username=username)
                 db_session.add(user)
 
-
-        await create_user_task
+        await create_user_task(email, username)
         ```
         """
 
