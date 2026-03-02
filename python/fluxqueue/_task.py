@@ -1,10 +1,12 @@
 import inspect
 from collections.abc import Callable, Coroutine
 from functools import wraps
-from typing import Any, ParamSpec, cast, get_type_hints, overload
+from typing import TYPE_CHECKING, Any, ParamSpec, cast, get_type_hints, overload
 
-from ._core import FluxQueueCore
 from .utils import get_task_name
+
+if TYPE_CHECKING:
+    from ._core import FluxQueueCore
 
 P = ParamSpec("P")
 
