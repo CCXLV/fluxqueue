@@ -81,6 +81,8 @@ nav:
   - API Reference:
       - api/index.md
       - api/fluxqueue.md
+      - api/context.md
+      - api/models.md
       - api/environment.md
   - About: about.md
   - Release Notes: release-notes.md

@@ -10,5 +10,3 @@ from fluxqueue import FluxQueue
 ```
 
 ::: fluxqueue.FluxQueue
-options:
-members: - task
