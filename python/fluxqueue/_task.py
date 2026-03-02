@@ -47,7 +47,7 @@ def _task_decorator(
 
     task_name = get_task_name(func, name)
 
-    # TODO: Add unique identifier 'fluxqueue' just to be 100% sure
+    cast(Any, func).fluxqueue = True
     cast(Any, func).task_name = task_name
     cast(Any, func).queue = queue
 
