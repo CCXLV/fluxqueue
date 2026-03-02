@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 import inspect
 from collections.abc import Callable, Coroutine
 from functools import wraps
-from typing import Any, ParamSpec, cast, get_type_hints, overload
+from typing import TYPE_CHECKING, Any, ParamSpec, cast, get_type_hints, overload
 
-from ._core import FluxQueueCore
 from .utils import get_task_name
+
+if TYPE_CHECKING:
+    from ._core import FluxQueueCore
 
 P = ParamSpec("P")
 
@@ -47,7 +51,7 @@ def _task_decorator(
 
     task_name = get_task_name(func, name)
 
-    # TODO: Add unique identifier 'fluxqueue' just to be 100% sure
+    cast(Any, func).fluxqueue = True
     cast(Any, func).task_name = task_name
     cast(Any, func).queue = queue
 

@@ -1,12 +1,25 @@
+from __future__ import annotations
+
 import inspect
 import threading
 from collections.abc import Callable, Coroutine
 from contextvars import ContextVar
-from typing import Any, Concatenate, ParamSpec, TypeVar, cast, get_type_hints, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Concatenate,
+    ParamSpec,
+    TypeVar,
+    cast,
+    get_type_hints,
+    overload,
+)
 
-from ._core import FluxQueueCore
 from ._task import _task_decorator
-from .models import TaskMetadata
+
+if TYPE_CHECKING:
+    from ._core import FluxQueueCore
+    from .models import TaskMetadata
 
 P = ParamSpec("P")
 
