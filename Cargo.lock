@@ -272,7 +272,7 @@ dependencies = [
 
 [[package]]
 name = "fluxqueue-worker"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -297,7 +297,7 @@ dependencies = [
 
 [[package]]
 name = "fluxqueue_core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "deadpool-redis",
  "fluxqueue-common",
