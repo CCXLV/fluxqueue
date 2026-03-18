@@ -35,7 +35,7 @@ fluxqueue worker install
     fluxqueue worker install --path .fluxqueue/
     ```
 
-    Then you can add a `worker_path` in your `pyproject.toml` to run the correct worker with `fluxqueue start` command:
+    Then you can add a `fluxqueue_cli.worker_path` in your `pyproject.toml` to run the correct worker with `fluxqueue start` command:
     ```toml
     [tool.fluxqueue_cli]
     worker_path = ".fluxqueue/fluxqueue_worker"
