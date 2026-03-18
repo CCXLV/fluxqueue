@@ -28,9 +28,16 @@ Run the installation command:
 fluxqueue worker install
 ```
 
+Installing the worker at custom path is straightforward:
+
+```bash
+fluxqueue worker install --path .fluxqueue/
+```
+
 This downloads and installs the `fluxqueue-worker` binary on your system. Once installed, you can run the worker in two ways:
 
 - Use the `fluxqueue-worker` binary directly
 - Use `fluxqueue start` command
+- Or just run the downloaded binary
 
 Both commands run the same worker binary, so choose whichever fits your workflow better.
