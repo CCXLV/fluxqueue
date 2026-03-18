@@ -266,6 +266,23 @@ fluxqueue start --tasks-module-path myapp/tasks --queue default --concurrency 4
 fluxqueue start --tasks-module-path myapp/tasks --queue urgent --concurrency 2
 ```
 
+## Running worker in the venv created by `uv`
+
+If you are using [uv](https://github.com/astral-sh/uv) to manage your project, you might encounter a `ModuleNotFoundError`.
+
+### The Reason
+
+The FluxQueue Worker is a native Rust binary (built with PyO3) that is hard-linked to your System Python (e.g., /usr/lib/libpython3.14.so).
+
+By default, uv often fetches and uses standalone Python builds. These portable distributions are isolated from the system’s standard library paths. When the worker launches, it attempts to load the system-native Python runtime, which cannot "see" the internal modules or site-packages inside the isolated uv virtual environment.
+
+### The Fix: Dynamically embedding the Python interpreter
+
+To resolve this, you have two options:
+
+- **Option 1:** Use `fluxqueue-cli` to run the worker. This automatically sets the correct environment variables to link the Python instance from your virtual environment rather than the system-wide one.
+- **Option 2:** Use the provided wrapper [script](https://github.com/CCXLV/fluxqueue/blob/main/scripts/run-worker.sh), which performs the same environment injection manually.
+
 ---
 
 ## Summary
