@@ -6,4 +6,5 @@ if [ -n "$LIB_DIR" ]; then
     export LD_LIBRARY_PATH="$LIB_DIR:$LD_LIBRARY_PATH"
 fi
 
+# NOTE: Change the path of the worker binary
 exec "./fluxqueue-worker" "$@"

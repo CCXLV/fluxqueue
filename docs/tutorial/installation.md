@@ -28,11 +28,18 @@ Run the installation command:
 fluxqueue worker install
 ```
 
-Installing the worker at custom path is straightforward:
+<!-- prettier-ignore -->
+!!! note
+    Installing the worker that way will require `sudo` permissions. To avoid that you can install the worker at desired destination with the following command:
+    ```bash
+    fluxqueue worker install --path .fluxqueue/
+    ```
 
-```bash
-fluxqueue worker install --path .fluxqueue/
-```
+    Which also allows you to add a `worker_path` in your `pyproject.toml` to run the correct worker with `fluxqueue start` command:
+    ```toml
+    [tool.fluxqueue_cli]
+    worker_path = ".fluxqueue/fluxqueue_worker"
+    ```
 
 This downloads and installs the `fluxqueue-worker` binary on your system. Once installed, you can run the worker in two ways:
 
