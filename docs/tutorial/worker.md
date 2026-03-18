@@ -281,7 +281,7 @@ By default, uv often fetches and uses standalone Python builds. These portable d
 To resolve this, you have two options:
 
 - **Option 1:** Use `fluxqueue-cli` to run the worker. This automatically sets the correct environment variables to link the Python instance from your virtual environment rather than the system-wide one.
-- **Option 2:** Use the provided wrapper [script](https://github.com/CCXLV/fluxqueue/blob/main/scripts/run-worker.sh), which performs the same environment injection manually.
+- **Option 2:** Use the provided wrapper [script](https://github.com/CCXLV/fluxqueue/blob/main/scripts/run-worker.sh) if you are running the worker binary itself, which performs the same environment injection manually.
 
 ---
 
