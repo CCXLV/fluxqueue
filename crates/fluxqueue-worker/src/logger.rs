@@ -42,7 +42,9 @@ pub fn initial_logs(
     info!("Redis: {}", redis_url);
     info!("Tasks module: {}", tasks_module_path);
     info!("Tasks found: {:?}", tasks);
-    info!("Contexts found: {:?}", contexts);
+    if contexts.len() > 0 {
+        info!("Contexts found: {:?}", contexts);
+    }
     info!("Starting up the executors...");
 }
 
