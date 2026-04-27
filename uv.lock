@@ -189,7 +189,7 @@ tests = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fluxqueue-cli", marker = "extra == 'cli'", specifier = ">=0.1.0b4" },
+    { name = "fluxqueue-cli", marker = "extra == 'cli'", specifier = ">=0.1.1" },
     { name = "maturin", marker = "extra == 'build'" },
     { name = "mkdocs-material", marker = "extra == 'docs'" },
     { name = "mkdocstrings", marker = "extra == 'docs'" },
