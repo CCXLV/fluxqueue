@@ -1,6 +1,6 @@
 [package]
 name = "fluxqueue-worker"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 
 [lib]
@@ -12,13 +12,13 @@ name = "fluxqueue-worker"
 path = "src/main.rs"
 
 [dependencies]
-pyo3 = { version = "0.28.2", features = ["auto-initialize"] }
+pyo3 = { version = "0.28.3", features = ["auto-initialize"] }
 pyo3-async-runtimes = { version = "0.28.0", features = ["tokio-runtime"] }
 pythonize = "0.28.0"
-uuid = { version = "1.20.0", features = ["v4"] }
+uuid = { version = "1.23.1", features = ["v4"] }
 redis = "0.32.7"
 deadpool-redis = { version = "0.22.1", features = ["rt_tokio_1"] }
-tokio = { version = "1.49.0", features = [
+tokio = { version = "1.52.1", features = [
   "macros",
   "rt-multi-thread",
   "signal",
@@ -28,15 +28,15 @@ rmp-serde = "1.3.1"
 rmpv = { version = "1.3.1", features = ["with-serde"] }
 serde = { version = "1.0.228", features = ["derive"] }
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = [
+tracing-subscriber = { version = "0.3.23", features = [
   "env-filter",
   "fmt",
   "time",
 ] }
 time = { version = "0.3.47", features = ["local-offset", "macros"] }
-clap = { version = "4.5.56", features = ["derive", "env"] }
-anyhow = "1.0.100"
-chrono = "0.4.43"
+clap = { version = "4.6.1", features = ["derive", "env"] }
+anyhow = "1.0.102"
+chrono = "0.4.44"
 num_cpus = "1.17.0"
 futures = "0.3.32"
 
