@@ -47,7 +47,7 @@ Changelog = "https://github.com/CCXLV/fluxqueue/releases"
 [project.optional-dependencies]
 dev = ["ruff"]
 tests = ["pytest-asyncio", "python-dotenv", "redis"]
-cli = ["fluxqueue-cli>=0.1.0b4"]
+cli = ["fluxqueue-cli>=0.1.1"]
 docs = ["mkdocs-material", "mkdocstrings", "mkdocstrings-python"]
 build = ["maturin"]
 
