@@ -7,8 +7,8 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-pyo3 = { version = "0.28.3", features = ["experimental-async"] }
-pyo3-async-runtimes = { version = "0.28.0", features = ["tokio-runtime"] }
-tokio = { version = "1.52.1", features = ["rt-multi-thread", "sync"] }
-deadpool-redis = { version = "0.22.1", features = ["rt_tokio_1"] }
+pyo3.workspace = true
+pyo3-async-runtimes.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+deadpool-redis.workspace = true
 fluxqueue-common.workspace = true

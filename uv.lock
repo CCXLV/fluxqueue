@@ -173,9 +173,6 @@ build = [
 cli = [
     { name = "fluxqueue-cli" },
 ]
-dev = [
-    { name = "ruff" },
-]
 docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings" },
@@ -185,6 +182,11 @@ tests = [
     { name = "pytest-asyncio" },
     { name = "python-dotenv" },
     { name = "redis" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -197,9 +199,11 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'tests'" },
     { name = "python-dotenv", marker = "extra == 'tests'" },
     { name = "redis", marker = "extra == 'tests'" },
-    { name = "ruff", marker = "extra == 'dev'" },
 ]
-provides-extras = ["build", "cli", "dev", "docs", "tests"]
+provides-extras = ["build", "cli", "docs", "tests"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.15.12" }]
 
 [[package]]
 name = "fluxqueue-cli"

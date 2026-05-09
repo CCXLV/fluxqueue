@@ -44,8 +44,10 @@ Documentation = "https://fluxqueue.ccxlv.dev"
 Issues = "https://github.com/CCXLV/fluxqueue/issues"
 Changelog = "https://github.com/CCXLV/fluxqueue/releases"
 
+[dependency-groups]
+dev = ["ruff>=0.15.12"]
+
 [project.optional-dependencies]
-dev = ["ruff"]
 tests = ["pytest-asyncio", "python-dotenv", "redis"]
 cli = ["fluxqueue-cli>=0.1.1"]
 docs = ["mkdocs-material", "mkdocstrings", "mkdocstrings-python"]
@@ -76,11 +78,4 @@ select = [
 ignore = [
   "E501", # line too long
 ]
-
-exclude = [
-  ".git",
-  ".ruff_cache",
-  ".venv",
-  "dist",
-  "build",
-]
+exclude = [".git", ".ruff_cache", ".venv", "dist", "build"]
