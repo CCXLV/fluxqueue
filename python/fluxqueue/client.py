@@ -2,7 +2,7 @@ from collections.abc import Callable, Coroutine
 from typing import Any, Concatenate, ParamSpec, cast, overload
 
 from ._core import FluxQueueCore
-from ._task import _task_decorator
+from ._task import Task, _task_decorator
 from .context import C, _with_context
 
 P = ParamSpec("P")
@@ -72,16 +72,16 @@ class FluxQueue:
         """
 
         @overload
-        def decorator(func: Callable[P, None]) -> Callable[P, None]: ...
+        def decorator(func: Callable[P, None]) -> Task[P, None]: ...
 
         @overload
         def decorator(
             func: Callable[P, Coroutine[Any, Any, None]],
-        ) -> Callable[P, Coroutine[Any, Any, None]]: ...
+        ) -> Task[P, Coroutine[Any, Any, None]]: ...
 
         def decorator(
             func: Callable[P, None | Coroutine[Any, Any, None]],
-        ) -> Callable[P, None | Coroutine[Any, Any, None]]:
+        ) -> Task[P, None | Coroutine[Any, Any, None]]:
             return _task_decorator(
                 cast(Any, func),
                 name=name,

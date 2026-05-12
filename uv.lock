@@ -179,6 +179,7 @@ docs = [
     { name = "mkdocstrings-python" },
 ]
 tests = [
+    { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "python-dotenv" },
     { name = "redis" },
@@ -196,6 +197,7 @@ requires-dist = [
     { name = "mkdocs-material", marker = "extra == 'docs'" },
     { name = "mkdocstrings", marker = "extra == 'docs'" },
     { name = "mkdocstrings-python", marker = "extra == 'docs'" },
+    { name = "pytest", marker = "extra == 'tests'" },
     { name = "pytest-asyncio", marker = "extra == 'tests'" },
     { name = "python-dotenv", marker = "extra == 'tests'" },
     { name = "redis", marker = "extra == 'tests'" },
