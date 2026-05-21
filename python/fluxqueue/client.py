@@ -169,16 +169,16 @@ class FluxQueue:
         """
 
         @overload
-        def decorator(func: Callable[Concatenate[C, P], None]) -> Callable[P, None]: ...
+        def decorator(func: Callable[Concatenate[C, P], None]) -> Task[P, None]: ...
 
         @overload
         def decorator(
             func: Callable[Concatenate[C, P], Coroutine[Any, Any, None]],
-        ) -> Callable[P, Coroutine[Any, Any, None]]: ...
+        ) -> Task[P, Coroutine[Any, Any, None]]: ...
 
         def decorator(
             func: Callable[Concatenate[C, P], None | Coroutine[Any, Any, None]],
-        ) -> Callable[P, None | Coroutine[Any, Any, None]]:
+        ) -> Task[P, None | Coroutine[Any, Any, None]]:
             return _with_context(
                 cast(Any, func),
                 name=name,
