@@ -4,15 +4,41 @@ import inspect
 from collections.abc import Callable, Coroutine
 from datetime import timedelta
 from functools import wraps
-from typing import TYPE_CHECKING, Any, ParamSpec, cast, get_type_hints, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ParamSpec,
+    Protocol,
+    TypeVar,
+    cast,
+    get_type_hints,
+    overload,
+)
 
-from .schedule import cron
+from .schedule import CronSchedule, cron
 from .utils import get_task_name
 
 if TYPE_CHECKING:
     from ._core import FluxQueueCore
 
 P = ParamSpec("P")
+R = TypeVar("R", covariant=True)
+
+
+class Task(Protocol[P, R]):
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+    def defer(self, delay: timedelta, **kwargs: Any) -> None: ...
+    def cron(
+        self,
+        cron_schedule: CronSchedule | None = None,
+        *,
+        expression: str | None = None,
+        minute: int | str = "*",
+        hour: int | str = "*",
+        day_of_month: int | str = "*",
+        month: int | str = "*",
+        day_of_week: int | str = "*",
+    ) -> None: ...
 
 
 def _task_wrapper(
@@ -49,7 +75,7 @@ def _task_decorator(
     queue: str,
     max_retries: int,
     core: FluxQueueCore,
-) -> Callable[P, None]: ...
+) -> Task[P, None]: ...
 
 
 @overload
@@ -60,7 +86,7 @@ def _task_decorator(
     queue: str,
     max_retries: int,
     core: FluxQueueCore,
-) -> Callable[P, Coroutine[Any, Any, None]]: ...
+) -> Task[P, Coroutine[Any, Any, None]]: ...
 
 
 def _task_decorator(
@@ -70,7 +96,7 @@ def _task_decorator(
     queue: str,
     max_retries: int,
     core: FluxQueueCore,
-) -> Callable[P, None | Coroutine[Any, Any, None]]:
+) -> Task[P, None | Coroutine[Any, Any, None]]:
     type_hints = get_type_hints(func)
     return_type = type_hints.get("return")
 
@@ -87,10 +113,13 @@ def _task_decorator(
         func, task_name=task_name, queue=queue, max_retries=max_retries, core=core
     )
 
-    def defer(delay: timedelta,  *args: P.args, **kwargs: P.kwargs):
-        pass
+    def defer(delay: timedelta, *args: P.args, **kwargs: P.kwargs):
+        cast(Any, func).delay = delay
+        cast(Any, func).defer_args = args
+        cast(Any, func).defer_kwargs = kwargs
 
     def _cron(
+        cron_schedule: CronSchedule | None = None,
         expression: str | None = None,
         minute: int | str = "*",
         hour: int | str = "*",
@@ -101,16 +130,21 @@ def _task_decorator(
         **kwargs: P.kwargs,
     ) -> Callable[P, None | Coroutine[Any, Any, None]]:
         cron(
-            expression,
+            cron_schedule,
+            expression=expression,
             minute=minute,
             hour=hour,
             day_of_month=day_of_month,
             month=month,
             day_of_week=day_of_week,
         )(func)
+
+        cast(Any, func).cron_args = args
+        cast(Any, func).cron_kwargs = kwargs
+
         return wrapped_task
 
     cast(Any, wrapped_task).defer = defer
     cast(Any, wrapped_task).cron = _cron
 
-    return wrapped_task
+    return cast(Task[P, None | Coroutine[Any, Any, None]], wrapped_task)
